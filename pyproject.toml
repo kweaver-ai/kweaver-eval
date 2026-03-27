@@ -1,0 +1,36 @@
+[project]
+name = "kweaver-eval"
+version = "0.1.0"
+description = "Evaluation and acceptability testing for the KWeaver system"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.40.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8",
+    "pyright>=1.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "destructive: test mutates server state (requires EVAL_RUN_DESTRUCTIVE=1)",
+]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
