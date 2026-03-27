@@ -38,7 +38,12 @@ _load_env_file(os.path.join(Path.home(), ".env.secrets"))
 
 
 def pytest_addoption(parser):
-    parser.addoption("--run-destructive", action="store_true", default=False, help="Run destructive tests")
+    parser.addoption(
+        "--run-destructive",
+        action="store_true",
+        default=False,
+        help="Run destructive tests",
+    )
 
 
 def pytest_configure(config):
@@ -47,7 +52,9 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     if not config.getoption("--run-destructive") and not os.environ.get("EVAL_RUN_DESTRUCTIVE"):
-        skip = pytest.mark.skip(reason="destructive test (use --run-destructive or EVAL_RUN_DESTRUCTIVE=1)")
+        skip = pytest.mark.skip(
+            reason="destructive test (use --run-destructive or EVAL_RUN_DESTRUCTIVE=1)"
+        )
         for item in items:
             if "destructive" in item.keywords:
                 item.add_marker(skip)

@@ -93,7 +93,9 @@ class JudgeAgent(BaseAgent):
         except (json.JSONDecodeError, ValueError):
             return JudgeResult(
                 verdict="fail",
-                findings=[Finding(severity=Severity.MEDIUM, message="Could not parse judge response")],
+                findings=[
+                    Finding(severity=Severity.MEDIUM, message="Could not parse judge response")
+                ],
                 reasoning=raw[:500],
             )
 

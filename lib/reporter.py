@@ -41,11 +41,17 @@ class Reporter:
             "pass_rate": f"{passed / total * 100:.1f}%" if total > 0 else "N/A",
             "failure_details": failures,
             "persistent_issues": [
-                {"id": i.id, "message": i.message, "times_seen": i.times_seen, "test_case": i.test_case}
+                {
+                    "id": i.id, "message": i.message,
+                    "times_seen": i.times_seen, "test_case": i.test_case,
+                }
                 for i in persistent
             ],
             "needs_human_attention": [
-                {"id": i.id, "message": i.message, "times_seen": i.times_seen, "test_case": i.test_case}
+                {
+                    "id": i.id, "message": i.message,
+                    "times_seen": i.times_seen, "test_case": i.test_case,
+                }
                 for i in human_attn
             ],
         }

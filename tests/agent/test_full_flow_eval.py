@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
-
 from lib.agents.cli_agent import CliAgent
 from lib.agents.judge_agent import JudgeAgent
 from lib.feedback import FeedbackTracker

@@ -9,7 +9,6 @@ from lib.recorder import Recorder
 from lib.scorer import Scorer
 from lib.types import CaseResult
 
-
 # ---------- Read-only tests ----------
 
 
@@ -160,9 +159,11 @@ async def test_bkn_full_lifecycle(cli_agent: CliAgent, scorer: Scorer, recorder:
         scorer.assert_exit_code(connect, 0, "ds connect")
         scorer.assert_json(connect, "ds connect returns JSON")
         if isinstance(connect.parsed_json, list) and connect.parsed_json:
-            ds_id = str(connect.parsed_json[0].get("datasource_id") or connect.parsed_json[0].get("id") or "")
+            first = connect.parsed_json[0]
+            ds_id = str(first.get("datasource_id") or first.get("id") or "")
         elif isinstance(connect.parsed_json, dict):
-            ds_id = str(connect.parsed_json.get("datasource_id") or connect.parsed_json.get("id") or "")
+            d = connect.parsed_json
+            ds_id = str(d.get("datasource_id") or d.get("id") or "")
         scorer.assert_true(bool(ds_id), "ds connect returns datasource ID")
 
         # Step 2: bkn create-from-ds

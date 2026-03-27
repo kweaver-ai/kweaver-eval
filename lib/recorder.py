@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lib.types import CaseResult, CliResult
+from lib.types import CaseResult
 
 
 class Recorder:

@@ -7,7 +7,7 @@ import pytest
 from lib.agents.cli_agent import CliAgent
 from lib.recorder import Recorder
 from lib.scorer import Scorer
-from lib.types import CaseResult, DeterministicResult
+from lib.types import CaseResult
 
 
 @pytest.fixture

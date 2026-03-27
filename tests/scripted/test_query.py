@@ -20,7 +20,8 @@ async def _find_kn_with_data(cli_agent: CliAgent) -> tuple[str, str] | None:
         if not kn_id:
             continue
         ot_result = await cli_agent.run_cli("bkn", "object-type", "list", kn_id, "--json")
-        if ot_result.exit_code == 0 and isinstance(ot_result.parsed_json, list) and ot_result.parsed_json:
+        is_list = isinstance(ot_result.parsed_json, list)
+        if ot_result.exit_code == 0 and is_list and ot_result.parsed_json:
             ot = ot_result.parsed_json[0]
             ot_name = str(ot.get("name") or ot.get("ot_name") or "")
             if ot_name:

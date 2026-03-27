@@ -50,13 +50,17 @@ class Scorer:
         else:
             self._assertions.append(f"{desc} exists")
 
-    def assert_json_is_list(self, result: CliResult, *, min_length: int = 0, label: str = "") -> None:
+    def assert_json_is_list(
+        self, result: CliResult, *, min_length: int = 0, label: str = "",
+    ) -> None:
         desc = label or f"`{' '.join(result.command)}` returns list"
         self._assertions.append(desc)
         if not isinstance(result.parsed_json, list):
             self._failures.append(f"{desc}: expected list, got {type(result.parsed_json).__name__}")
         elif len(result.parsed_json) < min_length:
-            self._failures.append(f"{desc}: expected >= {min_length} items, got {len(result.parsed_json)}")
+            self._failures.append(
+                f"{desc}: expected >= {min_length} items, got {len(result.parsed_json)}"
+            )
 
     def assert_stdout_contains(self, result: CliResult, substring: str, label: str = "") -> None:
         desc = label or f"stdout contains '{substring}'"
