@@ -10,14 +10,18 @@ from lib.scorer import Scorer
 from lib.types import CaseResult
 
 
-async def _find_agent(cli_agent: CliAgent) -> str | None:
-    """Find an accessible agent ID."""
+async def _find_accessible_agent(cli_agent: CliAgent) -> str | None:
+    """Find an agent ID that the current user can access (agent get returns 0)."""
     result = await cli_agent.run_cli("agent", "list")
     if result.exit_code != 0 or not isinstance(result.parsed_json, list):
         return None
     for agent in result.parsed_json:
         agent_id = str(agent.get("id") or agent.get("agent_id") or "")
-        if agent_id:
+        if not agent_id:
+            continue
+        # Verify we can actually access this agent
+        check = await cli_agent.run_cli("agent", "get", agent_id)
+        if check.exit_code == 0:
             return agent_id
     return None
 
@@ -41,9 +45,9 @@ async def test_agent_list(cli_agent: CliAgent, scorer: Scorer, recorder: Recorde
 
 async def test_agent_get(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
     """agent get returns agent detail."""
-    agent_id = await _find_agent(cli_agent)
+    agent_id = await _find_accessible_agent(cli_agent)
     if not agent_id:
-        pytest.skip("No agents available")
+        pytest.skip("No accessible agents available")
 
     result = await cli_agent.run_cli("agent", "get", agent_id)
     scorer.assert_exit_code(result, 0)
@@ -61,9 +65,9 @@ async def test_agent_get(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder
 
 async def test_agent_get_verbose(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
     """agent get --verbose returns full config."""
-    agent_id = await _find_agent(cli_agent)
+    agent_id = await _find_accessible_agent(cli_agent)
     if not agent_id:
-        pytest.skip("No agents available")
+        pytest.skip("No accessible agents available")
 
     result = await cli_agent.run_cli("agent", "get", agent_id, "--verbose")
     scorer.assert_exit_code(result, 0)
