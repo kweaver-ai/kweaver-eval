@@ -24,7 +24,7 @@ async def test_bkn_list_acceptability(
     Deterministic: checks exit code and JSON format.
     Agent judge: evaluates output quality, completeness, usability.
     """
-    result = await cli_agent.run_cli("bkn", "list", "--json")
+    result = await cli_agent.run_cli("bkn", "list")
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
     scorer.assert_json_is_list(result, label="bkn list returns array")

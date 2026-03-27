@@ -17,9 +17,9 @@ def auth_scorer():
 
 async def test_auth_status(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
     """Verify auth status returns current authentication info."""
-    result = await cli_agent.run_cli("auth", "status", "--json")
+    result = await cli_agent.run_cli("auth", "status")
     scorer.assert_exit_code(result, 0)
-    scorer.assert_json(result)
+    scorer.assert_stdout_contains(result, "Token status:", label="auth status shows token info")
 
     det = scorer.result(result.duration_ms)
     recorder.record_case(CaseResult(
@@ -35,7 +35,7 @@ async def test_auth_whoami(cli_agent: CliAgent, scorer: Scorer, recorder: Record
     """Verify auth whoami returns user identity."""
     result = await cli_agent.run_cli("auth", "status")
     scorer.assert_exit_code(result, 0)
-    scorer.assert_stdout_contains(result, "Logged in", label="auth status shows logged in")
+    scorer.assert_stdout_contains(result, "Token status:", label="auth status shows token info")
 
     det = scorer.result(result.duration_ms)
     recorder.record_case(CaseResult(

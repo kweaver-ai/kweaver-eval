@@ -12,14 +12,14 @@ from lib.types import CaseResult
 
 async def _find_kn_with_data(cli_agent: CliAgent) -> tuple[str, str] | None:
     """Find a KN that has object types with data. Returns (kn_id, ot_name) or None."""
-    list_result = await cli_agent.run_cli("bkn", "list", "--json")
+    list_result = await cli_agent.run_cli("bkn", "list")
     if list_result.exit_code != 0 or not isinstance(list_result.parsed_json, list):
         return None
     for kn in list_result.parsed_json:
         kn_id = str(kn.get("kn_id") or kn.get("id") or "")
         if not kn_id:
             continue
-        ot_result = await cli_agent.run_cli("bkn", "object-type", "list", kn_id, "--json")
+        ot_result = await cli_agent.run_cli("bkn", "object-type", "list", kn_id)
         is_list = isinstance(ot_result.parsed_json, list)
         if ot_result.exit_code == 0 and is_list and ot_result.parsed_json:
             ot = ot_result.parsed_json[0]
@@ -36,7 +36,7 @@ async def test_bkn_object_type_query(cli_agent: CliAgent, scorer: Scorer, record
         pytest.skip("No KN with object types available")
     kn_id, ot_name = found
 
-    result = await cli_agent.run_cli("bkn", "object-type", "query", kn_id, ot_name, "--json")
+    result = await cli_agent.run_cli("bkn", "object-type", "query", kn_id, ot_name)
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
 

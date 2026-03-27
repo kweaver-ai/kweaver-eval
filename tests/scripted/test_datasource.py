@@ -11,11 +11,14 @@ from lib.types import CaseResult
 
 
 async def test_datasource_list(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
-    """ds list returns a JSON array of datasources."""
-    result = await cli_agent.run_cli("ds", "list", "--json")
+    """ds list returns a JSON dict with an entries array of datasources."""
+    result = await cli_agent.run_cli("ds", "list")
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
-    scorer.assert_json_is_list(result, label="ds list returns array")
+    scorer.assert_true(
+        isinstance(result.parsed_json, dict) and isinstance(result.parsed_json.get("entries"), list),
+        "ds list returns dict with entries array",
+    )
 
     det = scorer.result(result.duration_ms)
     recorder.record_case(CaseResult(
@@ -29,18 +32,19 @@ async def test_datasource_list(cli_agent: CliAgent, scorer: Scorer, recorder: Re
 
 async def test_datasource_get(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
     """ds get retrieves a specific datasource by ID."""
-    list_result = await cli_agent.run_cli("ds", "list", "--json")
-    if list_result.exit_code != 0 or not isinstance(list_result.parsed_json, list):
+    list_result = await cli_agent.run_cli("ds", "list")
+    entries = []
+    if list_result.exit_code == 0 and isinstance(list_result.parsed_json, dict):
+        entries = list_result.parsed_json.get("entries", [])
+    if not isinstance(entries, list) or len(entries) == 0:
         pytest.skip("No datasources available")
-    if len(list_result.parsed_json) == 0:
-        pytest.skip("No datasources to test")
 
-    ds = list_result.parsed_json[0]
+    ds = entries[0]
     ds_id = str(ds.get("id") or ds.get("ds_id") or ds.get("datasource_id", ""))
     if not ds_id:
         pytest.skip("Cannot determine datasource ID")
 
-    result = await cli_agent.run_cli("ds", "get", ds_id, "--json")
+    result = await cli_agent.run_cli("ds", "get", ds_id)
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
 
@@ -56,18 +60,19 @@ async def test_datasource_get(cli_agent: CliAgent, scorer: Scorer, recorder: Rec
 
 async def test_datasource_tables(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
     """ds tables returns table info for a datasource."""
-    list_result = await cli_agent.run_cli("ds", "list", "--json")
-    if list_result.exit_code != 0 or not isinstance(list_result.parsed_json, list):
+    list_result = await cli_agent.run_cli("ds", "list")
+    entries = []
+    if list_result.exit_code == 0 and isinstance(list_result.parsed_json, dict):
+        entries = list_result.parsed_json.get("entries", [])
+    if not isinstance(entries, list) or len(entries) == 0:
         pytest.skip("No datasources available")
-    if len(list_result.parsed_json) == 0:
-        pytest.skip("No datasources to test")
 
-    ds = list_result.parsed_json[0]
+    ds = entries[0]
     ds_id = str(ds.get("id") or ds.get("ds_id") or ds.get("datasource_id", ""))
     if not ds_id:
         pytest.skip("Cannot determine datasource ID")
 
-    result = await cli_agent.run_cli("ds", "tables", ds_id, "--json")
+    result = await cli_agent.run_cli("ds", "tables", ds_id)
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
 

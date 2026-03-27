@@ -12,7 +12,7 @@ from lib.types import CaseResult
 
 async def _find_agent(cli_agent: CliAgent) -> str | None:
     """Find an accessible agent ID."""
-    result = await cli_agent.run_cli("agent", "list", "--json")
+    result = await cli_agent.run_cli("agent", "list")
     if result.exit_code != 0 or not isinstance(result.parsed_json, list):
         return None
     for agent in result.parsed_json:
@@ -24,7 +24,7 @@ async def _find_agent(cli_agent: CliAgent) -> str | None:
 
 async def test_agent_list(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder):
     """agent list returns a JSON array."""
-    result = await cli_agent.run_cli("agent", "list", "--json")
+    result = await cli_agent.run_cli("agent", "list")
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
     scorer.assert_json_is_list(result, label="agent list returns array")
@@ -45,7 +45,7 @@ async def test_agent_get(cli_agent: CliAgent, scorer: Scorer, recorder: Recorder
     if not agent_id:
         pytest.skip("No agents available")
 
-    result = await cli_agent.run_cli("agent", "get", agent_id, "--json")
+    result = await cli_agent.run_cli("agent", "get", agent_id)
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
 
@@ -65,7 +65,7 @@ async def test_agent_get_verbose(cli_agent: CliAgent, scorer: Scorer, recorder: 
     if not agent_id:
         pytest.skip("No agents available")
 
-    result = await cli_agent.run_cli("agent", "get", agent_id, "--verbose", "--json")
+    result = await cli_agent.run_cli("agent", "get", agent_id, "--verbose")
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
 
