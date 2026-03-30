@@ -11,7 +11,11 @@ async def test_bkn_object_type_list(cli_agent: CliAgent, scorer: Scorer, eval_ca
     result = await cli_agent.run_cli("bkn", "object-type", "list", kn_id)
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
-    scorer.assert_json_is_list(result, label="object-type list returns array")
+    # CLI may return list or {entries: list}
+    data = result.parsed_json
+    if isinstance(data, dict):
+        data = data.get("entries", data)
+    scorer.assert_true(isinstance(data, list), "object-type list returns array")
     det = scorer.result(result.duration_ms)
     await eval_case("bkn_object_type_list", [result], det, module="adp/bkn")
     assert det.passed, det.failures
@@ -31,8 +35,8 @@ async def test_bkn_object_type_query(
     cli_agent: CliAgent, scorer: Scorer, eval_case, kn_with_data: tuple[str, str]
 ):
     """bkn object-type query returns instances for an object type."""
-    kn_id, ot_name = kn_with_data
-    result = await cli_agent.run_cli("bkn", "object-type", "query", kn_id, ot_name)
+    kn_id, ot_id = kn_with_data
+    result = await cli_agent.run_cli("bkn", "object-type", "query", kn_id, ot_id)
     scorer.assert_exit_code(result, 0)
     scorer.assert_json(result)
     det = scorer.result(result.duration_ms)
