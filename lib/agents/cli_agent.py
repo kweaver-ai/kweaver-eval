@@ -31,7 +31,7 @@ class CliAgent(BaseAgent):
             usage={"exit_code": result.exit_code},
         )
 
-    async def run_cli(self, *args: str, timeout: float = 30.0) -> CliResult:
+    async def run_cli(self, *args: str, timeout: float = 60.0) -> CliResult:
         """Run kweaver CLI command as subprocess."""
         cmd = [self._cli, *args]
         start = time.monotonic()
