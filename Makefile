@@ -8,12 +8,14 @@ install:
 test:
 	python3 -m pytest tests/ --collect-only -q
 
+# Allure flag (only if plugin is installed)
+ALLURE_FLAG := $(shell python3 -c "import allure_pytest" 2>/dev/null && echo "--alluredir=test-result/allure")
+
 # Acceptance tests
 test-at:
 	@mkdir -p test-result
 	python3 -m pytest tests/ -v -s --tb=short -m api \
-		--junitxml=test-result/junit.xml \
-		--alluredir=test-result/allure
+		--junitxml=test-result/junit.xml $(ALLURE_FLAG)
 
 # AT + agent judge scoring
 test-at-full:
@@ -27,8 +29,7 @@ test-smoke:
 test-destructive:
 	EVAL_RUN_DESTRUCTIVE=1 python3 -m pytest tests/ -v -s --tb=short \
 		-m "api and destructive" \
-		--junitxml=test-result/junit.xml \
-		--alluredir=test-result/allure
+		--junitxml=test-result/junit.xml $(ALLURE_FLAG)
 
 # Report: full run with aggregate health report
 test-report:
