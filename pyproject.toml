@@ -8,6 +8,7 @@ dependencies = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "python-dotenv>=1.0",
+    "allure-pytest>=2.13",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +21,16 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
+    "api: acceptance test hitting live service",
+    "smoke: minimal subset for quick health check",
     "destructive: test mutates server state (requires EVAL_RUN_DESTRUCTIVE=1)",
+    "adp: AI Data Platform",
+    "bkn: Business Knowledge Network",
+    "vega: Vega engine",
+    "ds: Datasource",
+    "context_loader: Context Loader / MCP",
+    "dataflow: Dataflow (pending CLI)",
+    "execution_factory: Execution Factory (pending CLI)",
 ]
 addopts = "-v --tb=short"
 
