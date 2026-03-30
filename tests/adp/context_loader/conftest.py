@@ -6,8 +6,6 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 
-pytestmark = [pytest.mark.context_loader]
-
 
 @pytest.fixture(scope="session")
 async def cl_config_active(cli_agent: CliAgent) -> bool:

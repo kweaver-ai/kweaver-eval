@@ -6,8 +6,6 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 
-pytestmark = [pytest.mark.vega]
-
 
 @pytest.fixture(scope="session")
 async def catalog_id(cli_agent: CliAgent) -> str:

@@ -8,8 +8,6 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 
-pytestmark = [pytest.mark.bkn]
-
 
 @pytest.fixture(scope="session")
 async def kn_id(cli_agent: CliAgent) -> str:

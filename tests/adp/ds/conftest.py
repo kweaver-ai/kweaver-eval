@@ -6,8 +6,6 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 
-pytestmark = [pytest.mark.ds]
-
 
 @pytest.fixture(scope="session")
 async def ds_id(cli_agent: CliAgent) -> str:
