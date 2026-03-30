@@ -1,4 +1,4 @@
-.PHONY: test test-at test-at-full test-smoke test-destructive test-report lint ci install
+.PHONY: test test-at test-at-full test-smoke test-report lint ci install
 .PHONY: test-bkn test-vega test-ds test-context-loader
 
 install:
@@ -11,7 +11,7 @@ test:
 # Allure flag (only if plugin is installed)
 ALLURE_FLAG := $(shell python3 -c "import allure_pytest" 2>/dev/null && echo "--alluredir=test-result/allure")
 
-# Acceptance tests
+# Acceptance tests (full suite including lifecycle)
 test-at:
 	@mkdir -p test-result
 	python3 -m pytest tests/ -v -s --tb=short -m api \
@@ -24,12 +24,6 @@ test-at-full:
 # Smoke: minimal health check
 test-smoke:
 	python3 -m pytest tests/ -v -s --tb=short -m smoke
-
-# Destructive: lifecycle tests that create/delete resources
-test-destructive:
-	EVAL_RUN_DESTRUCTIVE=1 python3 -m pytest tests/ -v -s --tb=short \
-		-m "api and destructive" \
-		--junitxml=test-result/junit.xml $(ALLURE_FLAG)
 
 # Report: full run with aggregate health report
 test-report:

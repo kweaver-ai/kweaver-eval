@@ -1,16 +1,13 @@
-"""BKN lifecycle (destructive) acceptance tests."""
+"""BKN lifecycle acceptance tests."""
 
 from __future__ import annotations
 
 import time
 
-import pytest
-
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
 
-@pytest.mark.destructive
 async def test_bkn_full_lifecycle(
     cli_agent: CliAgent, scorer: Scorer, eval_case, db_credentials: dict
 ):
