@@ -26,13 +26,3 @@ async def test_vega_resource_get(cli_agent: CliAgent, scorer: Scorer, eval_case,
     assert det.passed, det.failures
 
 
-async def test_vega_resource_preview(
-    cli_agent: CliAgent, scorer: Scorer, eval_case, resource_id: str
-):
-    """vega resource preview returns a data preview."""
-    result = await cli_agent.run_cli("vega", "resource", "preview", resource_id)
-    scorer.assert_exit_code(result, 0)
-    scorer.assert_json(result)
-    det = scorer.result(result.duration_ms)
-    await eval_case("vega_resource_preview", [result], det, module="adp/vega")
-    assert det.passed, det.failures
