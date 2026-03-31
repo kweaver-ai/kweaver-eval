@@ -16,25 +16,101 @@ Every test case produces two scoring dimensions:
 ## Quick Start
 
 ```bash
-# Install
+# 1. Install
 pip install -e ".[dev]"
 
-# Configure (or rely on ~/.env.secrets)
+# 2. Configure
 cp .env.example .env
-# Edit .env with your KWEAVER_BASE_URL
+# Edit .env — all config keys are declared there.
+# Sensitive values (passwords, API keys) go in ~/.env.secrets.
 
-# Ensure kweaver CLI is authenticated
-kweaver auth login <platform-url> -u <user> -p <pass> -k
+# 3. Set credentials (not committed to git)
+cat >> ~/.env.secrets << 'EOF'
+export KWEAVER_USERNAME=you@example.com
+export KWEAVER_PASSWORD=your-password
+export KWEAVER_TEST_DB_HOST=10.0.0.1
+export KWEAVER_TEST_DB_USER=root
+export KWEAVER_TEST_DB_PASS=your-db-password
+EOF
 
-# Run tests (deterministic only, no API cost)
-make test
+# 4. Authenticate CLI (-k for self-signed cert)
+kweaver auth login https://dip-poc.aishu.cn -u <user> -p <pass> -k
 
-# Run with agent judge scoring (requires ANTHROPIC_API_KEY)
-make test-full
-
-# Full run with aggregate health report
-make test-report
+# 5. Run tests
+make test              # Collect-only (verify setup, no network)
+make test-at           # Acceptance tests against live service
+make test-vega         # Vega module only
+make test-bkn          # BKN module only
+make test-at-full      # AT + agent judge scoring
 ```
+
+### Configuration
+
+`.env` is the **single source of truth** for all config keys. Values
+resolve in priority order: `shell env` > `~/.env.secrets` > `.env`.
+
+| File | What goes here | Git tracked |
+|------|---------------|-------------|
+| `.env` | All keys with defaults (URLs, flags, DB type/port) | Yes |
+| `~/.env.secrets` | Sensitive values (passwords, API keys) | No |
+| `~/.kweaver/` | CLI auth tokens (auto-managed by `kweaver auth login`) | No |
+
+BKN and Vega lifecycle tests share the same `db_credentials` fixture
+(`tests/adp/conftest.py`). Vega uses a dedicated `kweaver_eval_test`
+database to avoid polluting existing data.
+
+## Test Coverage
+
+### Vega (vega-backend)
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Health | `vega health` | `test_vega_health` | pass |
+| Stats | `vega stats` | `test_vega_stats` | pass |
+| Inspect | `vega inspect` | `test_vega_inspect` | pass |
+| Catalog List | `vega catalog list` | `test_vega_catalog_list` | pass |
+| Catalog Get | `vega catalog get` | `test_vega_catalog_get` | pass |
+| Catalog Health | `vega catalog health` | `test_vega_catalog_health` | pass |
+| Catalog Test Connection | `vega catalog test-connection` | `test_vega_catalog_test_connection` | pass |
+| Catalog Resources | `vega catalog resources` | `test_vega_catalog_resources` | pass |
+| Catalog Discover | `vega catalog discover` | `test_vega_catalog_discover` | pass |
+| Catalog Create | `vega catalog create` | `test_vega_catalog_lifecycle` | pass (destructive) |
+| Catalog Update | `vega catalog update` | `test_vega_catalog_lifecycle` | pass (destructive) |
+| Catalog Delete | `vega catalog delete` | `test_vega_catalog_lifecycle` | pass (destructive) |
+| Resource List | `vega resource list` | `test_vega_resource_list` | pass |
+| Resource Get | `vega resource get` | `test_vega_resource_get` | pass |
+| Resource Query | `vega resource query` | `test_vega_resource_query` | skip (no physical resource) |
+| Connector Type List | `vega connector-type list` | `test_vega_connector_type_list` | pass |
+| Connector Type Get | `vega connector-type get` | `test_vega_connector_type_get` | skip (backend bug) |
+| Discovery Task List | `vega discovery-task list` | `test_vega_discovery_task_list` | skip (backend bug) |
+| Discovery Task Get | `vega discovery-task get` | `test_vega_discovery_task_get` | pass |
+
+**Coverage: 17 tests, 20/24 endpoints (83%)**
+
+#### Known Backend Bugs (pending fix)
+
+- **`connector-type get` 404** ([kweaver-ai/adp#427](https://github.com/kweaver-ai/adp/issues/427)): `GetConnectorType` handler reads `c.Param("id")` but route defines `:type` — param name mismatch.
+- **`discovery-task list` 404** ([kweaver-ai/adp#428](https://github.com/kweaver-ai/adp/issues/428)): `ListDiscoveryTasks` handler requires catalog_id but route has no path param.
+
+### BKN (Business Knowledge Network)
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| BKN List | `bkn list` | `test_bkn_list` | pass |
+| BKN Export | `bkn export` | `test_bkn_export` | pass |
+| BKN Search | `bkn search` | `test_bkn_search` | pass |
+| Object Type List | `bkn object-type list` | `test_bkn_object_type_list` | pass |
+| Relation Type List | `bkn relation-type list` | `test_bkn_relation_type_list` | pass |
+| Object Type Query | `bkn object-type query` | `test_bkn_object_type_query` | pass |
+| Full Lifecycle | ds connect → bkn create → export → search → cleanup | `test_bkn_full_lifecycle` | pass (destructive) |
+
+### DS (Datasource)
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| DS List | `ds list` | `test_datasource_list` | pass |
+| DS Get | `ds get` | `test_datasource_get` | pass |
+| DS Tables | `ds tables` | `test_datasource_tables` | pass |
 
 ## Project Structure
 
@@ -51,15 +127,35 @@ lib/
 └── reporter.py             # Aggregate report generation
 roles/                      # Judge role prompts (soul.md + instructions.md)
 tests/
-├── scripted/               # Deterministic cases (ported from kweaver-sdk e2e)
-└── agent/                  # Agent-driven evaluation cases
+├── adp/                    # ADP product line
+│   ├── bkn/                # BKN: list, export, search, schema, lifecycle
+│   ├── vega/               # Vega: health, catalogs, resources, connector-types, lifecycle
+│   ├── ds/                 # DS: list, get, tables
+│   ├── context_loader/     # Context Loader / MCP (pending)
+│   ├── dataflow/           # Dataflow (pending CLI)
+│   └── execution_factory/  # Execution Factory (pending CLI)
+└── agent/                  # Cross-module agent-driven evaluation
 test-result/
 ├── runs/<timestamp>/       # Per-run results, logs, reports
-│   ├── results.json
-│   ├── report.json
-│   └── logs/
 └── feedback.json           # Persistent cross-run issue tracker
 ```
+
+## Running Tests
+
+```bash
+make test                # Collect-only (no external deps)
+make test-at             # Acceptance tests against live service
+make test-at-full        # AT + agent judge scoring
+make test-smoke          # Minimal health check (smoke markers)
+make test-report         # Full run with aggregate report
+
+# Per-module
+make test-bkn            # BKN module only
+make test-vega           # Vega module only
+make test-ds             # Datasource module only
+```
+
+Lifecycle tests (create/delete resources) require `EVAL_RUN_DESTRUCTIVE=1` and appropriate DB credentials.
 
 ## Architecture
 
@@ -93,16 +189,17 @@ Issues are tracked across runs in `test-result/feedback.json`:
 - `times_seen >= 5` — requires human attention
 - Auto-resolved after consecutive absences
 
-## Environment
+## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `KWEAVER_BASE_URL` | Yes | KWeaver platform URL |
-| `KWEAVER_USERNAME` | Yes* | Auth (or set in ~/.env.secrets) |
-| `KWEAVER_PASSWORD` | Yes* | Auth (or set in ~/.env.secrets) |
-| `EVAL_RUN_DESTRUCTIVE` | No | Enable destructive tests (create/delete) |
-| `EVAL_AGENT_JUDGE` | No | Enable agent judge scoring |
-| `ANTHROPIC_API_KEY` | For judge | Required when EVAL_AGENT_JUDGE=1 |
+All config keys are declared in `.env.example`. Key groups:
+
+| Group | Variables | Required |
+|-------|-----------|----------|
+| Platform | `KWEAVER_BASE_URL`, `KWEAVER_BUSINESS_DOMAIN`, `NODE_TLS_REJECT_UNAUTHORIZED` | Yes |
+| Auth | `KWEAVER_USERNAME`, `KWEAVER_PASSWORD` | Yes (in ~/.env.secrets) |
+| Database | `KWEAVER_TEST_DB_HOST/PORT/USER/PASS/NAME/TYPE` | For lifecycle tests |
+| Feature flags | `EVAL_AGENT_JUDGE`, `EVAL_REPORT` | No |
+| API keys | `ANTHROPIC_API_KEY` | When EVAL_AGENT_JUDGE=1 |
 
 ## License
 

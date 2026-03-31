@@ -56,3 +56,16 @@ async def test_vega_catalog_resources(
     det = scorer.result(result.duration_ms)
     await eval_case("vega_catalog_resources", [result], det, module="adp/vega")
     assert det.passed, det.failures
+
+
+async def test_vega_catalog_discover(
+    cli_agent: CliAgent, scorer: Scorer, eval_case, catalog_id: str
+):
+    """vega catalog discover triggers async discovery and returns a task ID."""
+    result = await cli_agent.run_cli("vega", "catalog", "discover", catalog_id)
+    scorer.assert_exit_code(result, 0)
+    scorer.assert_json(result)
+    scorer.assert_json_field(result, "id", label="discover returns task id")
+    det = scorer.result(result.duration_ms)
+    await eval_case("vega_catalog_discover", [result], det, module="adp/vega")
+    assert det.passed, det.failures

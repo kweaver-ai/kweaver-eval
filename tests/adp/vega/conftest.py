@@ -1,6 +1,11 @@
-"""Vega module conftest."""
+"""Vega module conftest.
+
+db_credentials fixture is inherited from tests/adp/conftest.py.
+"""
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -43,3 +48,20 @@ async def resource_id(cli_agent: CliAgent) -> str:
     if not res_id:
         pytest.skip("Cannot determine resource ID")
     return res_id
+
+
+@pytest.fixture(scope="session")
+def vega_connector_config(db_credentials: dict) -> str:
+    """Build connector_config JSON string for vega catalog create.
+
+    Uses shared db_credentials from adp conftest, with vega-specific
+    field mapping (username, databases array, kweaver_eval_test db).
+    """
+    cfg = {
+        "host": db_credentials["host"],
+        "port": int(db_credentials["port"]),
+        "username": db_credentials["user"],
+        "password": db_credentials["password"],
+        "databases": ["kweaver_eval_test"],
+    }
+    return json.dumps(cfg)

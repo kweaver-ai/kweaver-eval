@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -39,3 +40,22 @@ async def ensure_authenticated(cli_agent: CliAgent):
     result = await cli_agent.run_cli("auth", "status")
     if result.exit_code != 0 or "Token status:" not in result.stdout:
         pytest.skip("Not authenticated — run `kweaver auth login` first")
+
+
+@pytest.fixture(scope="session")
+def db_credentials() -> dict:
+    """Read KWEAVER_TEST_DB_* env vars. Shared by BKN and Vega lifecycle tests.
+
+    Skips if required vars are not set.
+    """
+    creds = {
+        "host": os.environ.get("KWEAVER_TEST_DB_HOST", ""),
+        "port": os.environ.get("KWEAVER_TEST_DB_PORT", "3306"),
+        "user": os.environ.get("KWEAVER_TEST_DB_USER", ""),
+        "password": os.environ.get("KWEAVER_TEST_DB_PASS", ""),
+        "database": os.environ.get("KWEAVER_TEST_DB_NAME", ""),
+        "db_type": os.environ.get("KWEAVER_TEST_DB_TYPE", "mysql"),
+    }
+    if not all([creds["host"], creds["user"], creds["password"], creds["database"]]):
+        pytest.skip("E2E database not configured (KWEAVER_TEST_DB_* env vars)")
+    return creds

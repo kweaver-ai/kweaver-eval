@@ -36,9 +36,10 @@ async def test_bkn_full_lifecycle(
             ds_id = str(d.get("datasource_id") or d.get("id") or "")
         scorer.assert_true(bool(ds_id), "ds connect returns datasource ID")
 
-        # Step 2: bkn create-from-ds
+        # Step 2: bkn create-from-ds (may take >60s on slow environments)
         create = await cli_agent.run_cli(
             "bkn", "create-from-ds", ds_id, "--name", kn_name, "--no-build",
+            timeout=180.0,
         )
         steps.append(create)
         scorer.assert_exit_code(create, 0, "bkn create-from-ds")

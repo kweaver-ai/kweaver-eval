@@ -1,29 +1,15 @@
-"""BKN module conftest — fixtures for knowledge network tests."""
+"""BKN module conftest — fixtures for knowledge network tests.
+
+db_credentials fixture is inherited from tests/adp/conftest.py.
+"""
 
 from __future__ import annotations
 
-import os
 import time
 
 import pytest
 
 from lib.agents.cli_agent import CliAgent
-
-
-@pytest.fixture(scope="session")
-def db_credentials() -> dict:
-    """Read KWEAVER_TEST_DB_* env vars. Skips if not configured."""
-    creds = {
-        "host": os.environ.get("KWEAVER_TEST_DB_HOST", ""),
-        "port": os.environ.get("KWEAVER_TEST_DB_PORT", "3306"),
-        "user": os.environ.get("KWEAVER_TEST_DB_USER", ""),
-        "password": os.environ.get("KWEAVER_TEST_DB_PASS", ""),
-        "database": os.environ.get("KWEAVER_TEST_DB_NAME", ""),
-        "db_type": os.environ.get("KWEAVER_TEST_DB_TYPE", "mysql"),
-    }
-    if not all([creds["host"], creds["user"], creds["password"], creds["database"]]):
-        pytest.skip("E2E database not configured (KWEAVER_TEST_DB_* env vars)")
-    return creds
 
 
 async def _find_existing_kn(cli_agent: CliAgent) -> str | None:

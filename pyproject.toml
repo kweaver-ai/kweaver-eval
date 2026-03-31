@@ -31,6 +31,7 @@ markers = [
     "context_loader: Context Loader / MCP",
     "dataflow: Dataflow (pending CLI)",
     "execution_factory: Execution Factory (pending CLI)",
+    "known_bug: test blocked by a known upstream bug (use issue URL as argument)",
 ]
 addopts = "-v --tb=short"
 
