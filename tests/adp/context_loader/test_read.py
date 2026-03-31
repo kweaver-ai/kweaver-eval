@@ -36,7 +36,6 @@ async def test_context_loader_bkn_export(
     assert det.passed, det.failures
 
 
-@pytest.mark.tbd("No KN with queryable object types in environment")
 async def test_context_loader_object_type_query(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
     cl_kn_with_ot: tuple[str, str],

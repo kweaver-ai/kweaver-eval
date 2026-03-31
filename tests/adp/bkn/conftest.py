@@ -25,7 +25,11 @@ async def _find_existing_kn(cli_agent: CliAgent) -> str | None:
 
 
 async def _find_kn_with_object_types(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Find a KN that has object types. Returns (kn_id, ot_id) or None."""
+    """Find a KN with queryable object types. Returns (kn_id, ot_id) or None.
+
+    Verifies that the OT can actually be queried (not just that it exists),
+    since orphan KNs with deleted datasources will have OTs but fail on query.
+    """
     result = await cli_agent.run_cli("bkn", "list")
     if result.exit_code != 0 or not isinstance(result.parsed_json, list):
         return None
@@ -44,7 +48,13 @@ async def _find_kn_with_object_types(cli_agent: CliAgent) -> tuple[str, str] | N
         ):
             ot = ot_entries[0]
             ot_id = str(ot.get("id") or ot.get("ot_id") or "")
-            if ot_id:
+            if not ot_id:
+                continue
+            # Verify query actually works (catch orphan KNs)
+            probe = await cli_agent.run_cli(
+                "bkn", "object-type", "query", kn_id, ot_id, "--limit", "1",
+            )
+            if probe.exit_code == 0:
                 return kn_id, ot_id
     return None
 

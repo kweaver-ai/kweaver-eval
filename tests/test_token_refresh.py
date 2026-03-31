@@ -15,17 +15,15 @@ from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
 
-def _kweaver_config_dir() -> Path:
-    return Path.home() / ".kweaver"
-
-
 def _find_token_file() -> Path | None:
-    """Find the token.json for the current platform."""
-    cfg_dir = _kweaver_config_dir()
-    if not cfg_dir.is_dir():
+    """Find token.json for the current platform.
+
+    CLI stores tokens at ~/.kweaver/platforms/<base64-url>/token.json.
+    """
+    platforms_dir = Path.home() / ".kweaver" / "platforms"
+    if not platforms_dir.is_dir():
         return None
-    # Look for platform dirs with token.json
-    for platform_dir in cfg_dir.iterdir():
+    for platform_dir in platforms_dir.iterdir():
         if platform_dir.is_dir():
             token_file = platform_dir / "token.json"
             if token_file.exists():
@@ -34,12 +32,11 @@ def _find_token_file() -> Path | None:
 
 
 @pytest.mark.api
-@pytest.mark.tbd("Token file path lookup does not match CLI storage layout")
 async def test_token_auto_refresh(cli_agent: CliAgent, scorer: Scorer, eval_case):
     """CLI auto-refreshes expired token on next command."""
     token_file = _find_token_file()
     if not token_file:
-        pytest.skip("No token.json found in ~/.kweaver/")
+        pytest.skip("No token.json found in ~/.kweaver/platforms/")
 
     original = json.loads(token_file.read_text())
     if not original.get("refreshToken", "").strip():
@@ -67,7 +64,9 @@ async def test_token_auto_refresh(cli_agent: CliAgent, scorer: Scorer, eval_case
         status = await cli_agent.run_cli("auth", "status")
         steps.append(status)
         scorer.assert_exit_code(status, 0, "auth status after refresh")
-        scorer.assert_stdout_contains(status, "Token status:", "auth reports active")
+        scorer.assert_stdout_contains(
+            status, "Token status:", "auth reports active",
+        )
 
     finally:
         # Restore original token if refresh failed

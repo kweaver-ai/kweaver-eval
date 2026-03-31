@@ -41,7 +41,7 @@ async def _find_llm_model(cli_agent: CliAgent) -> str | None:
 async def test_agent_crud_lifecycle(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
 ):
-    """Agent lifecycle: create -> get -> get-by-key -> update -> delete."""
+    """Agent lifecycle: create -> get -> get --verbose -> get-by-key -> update -> delete."""
     llm_id = await _find_llm_model(cli_agent)
     if not llm_id:
         pytest.skip("No LLM model available in model-factory")
@@ -72,6 +72,14 @@ async def test_agent_crud_lifecycle(
         steps.append(get)
         scorer.assert_exit_code(get, 0, "agent get")
         scorer.assert_json(get, "agent get returns JSON")
+
+        # Step 2b: get --verbose
+        get_v = await cli_agent.run_cli(
+            "agent", "get", agent_id, "--verbose",
+        )
+        steps.append(get_v)
+        scorer.assert_exit_code(get_v, 0, "agent get --verbose")
+        scorer.assert_json(get_v, "agent get --verbose returns JSON")
 
         # Step 3: get-by-key
         get_key = await cli_agent.run_cli("agent", "get-by-key", agent_key)

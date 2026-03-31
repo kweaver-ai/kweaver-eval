@@ -35,7 +35,10 @@ async def cl_kn_id(cli_agent: CliAgent) -> str:
 
 @pytest.fixture(scope="session")
 async def cl_kn_with_ot(cli_agent: CliAgent) -> tuple[str, str]:
-    """Find a KN with object types. Returns (kn_id, ot_id)."""
+    """Find a KN with queryable object types. Returns (kn_id, ot_id).
+
+    Probes query to skip orphan KNs whose datasource was deleted.
+    """
     result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
     if result.exit_code != 0:
         pytest.skip("Cannot list KNs")
@@ -58,6 +61,11 @@ async def cl_kn_with_ot(cli_agent: CliAgent) -> tuple[str, str]:
             ot_id = str(
                 entries[0].get("id") or entries[0].get("ot_id") or "",
             )
-            if ot_id:
+            if not ot_id:
+                continue
+            probe = await cli_agent.run_cli(
+                "bkn", "object-type", "query", kn_id, ot_id, "--limit", "1",
+            )
+            if probe.exit_code == 0:
                 return kn_id, ot_id
-    pytest.skip("No KN with object types available")
+    pytest.skip("No KN with queryable object types available")

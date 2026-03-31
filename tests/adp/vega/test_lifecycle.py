@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 import pytest
@@ -71,7 +72,31 @@ async def test_vega_catalog_lifecycle(
         scorer.assert_exit_code(get, 0, "catalog get after create")
         scorer.assert_json(get, "catalog get returns JSON")
 
-        # Step 5: update catalog (PUT full-replace, all required fields)
+        # Step 5: resource list + query (after discover, physical resources exist)
+        res_list = await cli_agent.run_cli(
+            "vega", "catalog", "resources", cat_id, "--limit", "3",
+        )
+        steps.append(res_list)
+        scorer.assert_exit_code(res_list, 0, "catalog resources after discover")
+        scorer.assert_json(res_list, "catalog resources returns JSON")
+        res_entries = res_list.parsed_json
+        if isinstance(res_entries, dict):
+            res_entries = res_entries.get("entries") or []
+        rid = ""
+        if isinstance(res_entries, list) and res_entries:
+            rid = str(res_entries[0].get("id") or "")
+        scorer.assert_true(bool(rid), "discover produced at least one resource")
+
+        if rid:
+            res_query = await cli_agent.run_cli(
+                "vega", "resource", "query", rid,
+                "-d", json.dumps({"limit": 2}),
+            )
+            steps.append(res_query)
+            scorer.assert_exit_code(res_query, 0, "resource query")
+            scorer.assert_json(res_query, "resource query returns JSON")
+
+        # Step 6: update catalog (PUT full-replace, all required fields)
         update = await cli_agent.run_cli(
             "vega", "catalog", "update", cat_id,
             "--name", cat_name,

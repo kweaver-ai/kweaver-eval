@@ -55,13 +55,13 @@ def vega_connector_config(db_credentials: dict) -> str:
     """Build connector_config JSON string for vega catalog create.
 
     Uses shared db_credentials from adp conftest, with vega-specific
-    field mapping (username, databases array, kweaver_eval_test db).
+    field mapping (username, databases array).
     """
     cfg = {
         "host": db_credentials["host"],
         "port": int(db_credentials["port"]),
         "username": db_credentials["user"],
         "password": db_credentials["password"],
-        "databases": ["kweaver_eval_test"],
+        "databases": [db_credentials["database"]],
     }
     return json.dumps(cfg)
