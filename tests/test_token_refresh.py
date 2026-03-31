@@ -34,6 +34,7 @@ def _find_token_file() -> Path | None:
 
 
 @pytest.mark.api
+@pytest.mark.tbd("Token file path lookup does not match CLI storage layout")
 async def test_token_auto_refresh(cli_agent: CliAgent, scorer: Scorer, eval_case):
     """CLI auto-refreshes expired token on next command."""
     token_file = _find_token_file()

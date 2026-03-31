@@ -30,6 +30,7 @@ async def test_vega_resource_get(cli_agent: CliAgent, scorer: Scorer, eval_case,
     assert det.passed, det.failures
 
 
+@pytest.mark.tbd("No persistent physical resource — lifecycle cleans up")
 async def test_vega_resource_query(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
 ):

@@ -33,6 +33,7 @@ async def test_bkn_relation_type_list(cli_agent: CliAgent, scorer: Scorer, eval_
     assert det.passed, det.failures
 
 
+@pytest.mark.tbd("Backend 500 when KN data source is unavailable")
 async def test_bkn_object_type_query(
     cli_agent: CliAgent, scorer: Scorer, eval_case, kn_with_data: tuple[str, str]
 ):

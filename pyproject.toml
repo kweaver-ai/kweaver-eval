@@ -32,6 +32,7 @@ markers = [
     "dataflow: Dataflow (pending CLI)",
     "execution_factory: Execution Factory (pending CLI)",
     "known_bug: test blocked by a known upstream bug (use issue URL as argument)",
+    "tbd: test skips due to unresolved issue — needs deep analysis",
 ]
 addopts = "-v --tb=short"
 

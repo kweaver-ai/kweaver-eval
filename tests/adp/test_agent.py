@@ -38,6 +38,7 @@ async def test_agent_list(cli_agent: CliAgent, scorer: Scorer, eval_case):
     assert det.passed, det.failures
 
 
+@pytest.mark.tbd("All listed agents return 403 on get — permission issue")
 async def test_agent_get(cli_agent: CliAgent, scorer: Scorer, eval_case):
     """agent get returns agent detail."""
     agent_id = await _find_accessible_agent(cli_agent)
@@ -51,6 +52,7 @@ async def test_agent_get(cli_agent: CliAgent, scorer: Scorer, eval_case):
     assert det.passed, det.failures
 
 
+@pytest.mark.tbd("All listed agents return 403 on get — permission issue")
 async def test_agent_get_verbose(cli_agent: CliAgent, scorer: Scorer, eval_case):
     """agent get --verbose returns full config."""
     agent_id = await _find_accessible_agent(cli_agent)
