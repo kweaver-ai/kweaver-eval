@@ -58,7 +58,9 @@ class CliAgent(BaseAgent):
 
         elapsed = (time.monotonic() - start) * 1000
         stdout = stdout_bytes.decode("utf-8", errors="replace")
-        stderr = stderr_bytes.decode("utf-8", errors="replace")
+        stderr = self._filter_noise(
+            stderr_bytes.decode("utf-8", errors="replace"),
+        )
 
         parsed = None
         try:
@@ -74,3 +76,14 @@ class CliAgent(BaseAgent):
             duration_ms=elapsed,
             parsed_json=parsed,
         )
+
+    @staticmethod
+    def _filter_noise(stderr: str) -> str:
+        """Remove known noisy warnings from stderr."""
+        lines = stderr.splitlines()
+        filtered = [
+            line for line in lines
+            if "NODE_TLS_REJECT_UNAUTHORIZED" not in line
+            and "Use `node --trace-warnings" not in line
+        ]
+        return "\n".join(filtered).strip()

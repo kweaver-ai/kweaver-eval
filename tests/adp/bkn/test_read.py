@@ -37,3 +37,23 @@ async def test_bkn_search(cli_agent: CliAgent, scorer: Scorer, eval_case, kn_id:
     det = scorer.result(result.duration_ms)
     await eval_case("bkn_search", [result], det, module="adp/bkn")
     assert det.passed, det.failures
+
+
+async def test_bkn_get(cli_agent: CliAgent, scorer: Scorer, eval_case, kn_id: str):
+    """bkn get returns knowledge network details."""
+    result = await cli_agent.run_cli("bkn", "get", kn_id)
+    scorer.assert_exit_code(result, 0)
+    scorer.assert_json(result)
+    det = scorer.result(result.duration_ms)
+    await eval_case("bkn_get", [result], det, module="adp/bkn")
+    assert det.passed, det.failures
+
+
+async def test_bkn_stats(cli_agent: CliAgent, scorer: Scorer, eval_case, kn_id: str):
+    """bkn stats returns statistics for a knowledge network."""
+    result = await cli_agent.run_cli("bkn", "stats", kn_id)
+    scorer.assert_exit_code(result, 0)
+    scorer.assert_json(result)
+    det = scorer.result(result.duration_ms)
+    await eval_case("bkn_stats", [result], det, module="adp/bkn")
+    assert det.passed, det.failures

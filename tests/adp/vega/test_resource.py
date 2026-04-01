@@ -6,6 +6,8 @@ physical resources, avoids dependency on environment data).
 
 from __future__ import annotations
 
+import pytest
+
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
@@ -29,4 +31,17 @@ async def test_vega_resource_get(
     scorer.assert_json(result)
     det = scorer.result(result.duration_ms)
     await eval_case("vega_resource_get", [result], det, module="adp/vega")
+    assert det.passed, det.failures
+
+
+@pytest.mark.wait_for_env("GET /resources/list returns 404 on dip-poc")
+async def test_vega_resource_list_all(
+    cli_agent: CliAgent, scorer: Scorer, eval_case,
+):
+    """vega resource list-all returns resources via /resources/list endpoint."""
+    result = await cli_agent.run_cli("vega", "resource", "list-all")
+    scorer.assert_exit_code(result, 0)
+    scorer.assert_json(result)
+    det = scorer.result(result.duration_ms)
+    await eval_case("vega_resource_list_all", [result], det, module="adp/vega")
     assert det.passed, det.failures

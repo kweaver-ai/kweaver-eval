@@ -33,6 +33,7 @@ markers = [
     "execution_factory: Execution Factory (pending CLI)",
     "known_bug: test blocked by a known upstream bug (use issue URL as argument)",
     "tbd: test skips due to unresolved issue — needs deep analysis",
+    "wait_for_env: test ready but blocked by environment deployment",
 ]
 addopts = "-v --tb=short"
 

@@ -1,7 +1,12 @@
-"""Judge agent: evaluates test results via Claude API with role prompts."""
+"""Judge agent: evaluates test results via Claude CLI with role prompts.
+
+Uses `claude` CLI subprocess (same as shadowcoder) instead of Anthropic SDK,
+so no ANTHROPIC_API_KEY is needed — authentication is handled by Claude Code.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -10,56 +15,72 @@ from lib.types import AgentRequest, AgentResult, Finding, JudgeResult, Severity
 
 
 class JudgeAgent(BaseAgent):
-    """Evaluates test case results using Claude API with configurable role prompts."""
+    """Evaluates test case results using Claude CLI with configurable role prompts."""
 
-    def __init__(self, role: str = "acceptability_judge", model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, role: str = "acceptability_judge", model: str = "sonnet"):
         self._role = role
         self._model = model
-        self._client = None
 
     def get_model(self) -> str:
         return self._model
 
-    def _get_client(self):
-        if self._client is None:
-            import anthropic
-            self._client = anthropic.Anthropic()
-        return self._client
-
     async def run(self, request: AgentRequest) -> AgentResult:
-        """Evaluate test results. Returns AgentResult with JudgeResult serialized as JSON."""
+        """Evaluate test results via claude CLI subprocess."""
         system_prompt = self._load_role_prompt(self._role)
         user_prompt = request.prompt_override or self._build_prompt(request)
 
         start = time.monotonic()
-        client = self._get_client()
-        message = client.messages.create(
-            model=self._model,
-            max_tokens=2048,
-            system=system_prompt or "You are a QA evaluation agent.",
-            messages=[{"role": "user", "content": user_prompt}],
+        cmd = [
+            "claude", "-p",
+            "--output-format", "json",
+            "--model", self._model,
+        ]
+        if system_prompt:
+            cmd.extend(["--system-prompt", system_prompt])
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(user_prompt.encode("utf-8")),
+            timeout=120.0,
         )
         elapsed = (time.monotonic() - start) * 1000
 
-        raw = message.content[0].text
-        judge_result = self._parse_response(raw)
+        stdout = stdout_bytes.decode("utf-8", errors="replace")
+
+        # claude --output-format json returns {"result": "...", "usage": {...}}
+        raw_text = ""
+        usage = {}
+        try:
+            envelope = json.loads(stdout)
+            raw_text = envelope.get("result", stdout)
+            usage = envelope.get("usage", {})
+        except (json.JSONDecodeError, ValueError):
+            raw_text = stdout
+
+        judge_result = self._parse_response(raw_text)
         judge_result.model = self._model
 
         return AgentResult(
             output=json.dumps({
                 "verdict": judge_result.verdict,
                 "findings": [
-                    {"severity": f.severity.value, "message": f.message, "location": f.location}
+                    {
+                        "severity": f.severity.value,
+                        "message": f.message,
+                        "location": f.location,
+                    }
                     for f in judge_result.findings
                 ],
                 "reasoning": judge_result.reasoning,
             }),
             model=self._model,
             duration_ms=elapsed,
-            usage={
-                "input_tokens": message.usage.input_tokens,
-                "output_tokens": message.usage.output_tokens,
-            },
+            usage=usage,
         )
 
     def _build_prompt(self, request: AgentRequest) -> str:
@@ -94,7 +115,10 @@ class JudgeAgent(BaseAgent):
             return JudgeResult(
                 verdict="fail",
                 findings=[
-                    Finding(severity=Severity.MEDIUM, message="Could not parse judge response")
+                    Finding(
+                        severity=Severity.MEDIUM,
+                        message="Could not parse judge response",
+                    )
                 ],
                 reasoning=raw[:500],
             )

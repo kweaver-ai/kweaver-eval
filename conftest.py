@@ -48,6 +48,19 @@ _load_env_file(os.path.join(Path.home(), ".env.secrets"))
 
 
 
+# ---------- Auto-skip marked tests ----------
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Auto-skip tests marked known_bug, wait_for_env, or tbd."""
+    for item in items:
+        for marker_name in ("known_bug", "wait_for_env", "tbd"):
+            marker = item.get_closest_marker(marker_name)
+            if marker:
+                reason = marker.args[0] if marker.args else marker_name
+                item.add_marker(pytest.mark.skip(reason=reason))
+
+
 # ---------- Session-scoped fixtures ----------
 
 

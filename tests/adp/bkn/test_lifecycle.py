@@ -63,10 +63,10 @@ async def test_bkn_full_lifecycle(
             )
         scorer.assert_true(bool(kn_id), "bkn create-from-ds returns KN ID")
 
-        # Step 3: bkn build --wait
+        # Step 3: bkn build --wait (hd_supply has ~30 tables, may take 5+ min)
         build = await cli_agent.run_cli(
-            "bkn", "build", kn_id, "--wait", "--timeout", "300",
-            timeout=360.0,
+            "bkn", "build", kn_id, "--wait", "--timeout", "600",
+            timeout=660.0,
         )
         steps.append(build)
         scorer.assert_exit_code(build, 0, "bkn build")
@@ -110,6 +110,75 @@ async def test_bkn_full_lifecycle(
             steps.append(ot_query)
             scorer.assert_exit_code(ot_query, 0, "object-type query")
             scorer.assert_json(ot_query, "object-type query returns JSON")
+
+        # Step 8: relation-type create → get → delete
+        # Find a data property from the OT to use as mapping key
+        rt_id = ""
+        if ot_id and isinstance(ot_entries, list) and len(ot_entries) >= 2:
+            src_ot = ot_id
+            tgt_ot = str(
+                ot_entries[1].get("id")
+                or ot_entries[1].get("ot_id")
+                or "",
+            )
+            # Get source OT properties for mapping
+            src_get = await cli_agent.run_cli(
+                "bkn", "object-type", "get", kn_id, src_ot,
+            )
+            tgt_get = await cli_agent.run_cli(
+                "bkn", "object-type", "get", kn_id, tgt_ot,
+            )
+            src_props = set()
+            tgt_props = set()
+            for get_r, prop_set in [
+                (src_get, src_props), (tgt_get, tgt_props),
+            ]:
+                if isinstance(get_r.parsed_json, dict):
+                    entry = get_r.parsed_json
+                    if "entries" in entry:
+                        entry = (entry["entries"] or [{}])[0]
+                    for p in entry.get("data_properties") or []:
+                        prop_set.add(p.get("name", ""))
+            # Find a common property for mapping
+            common = src_props & tgt_props - {""}
+            if tgt_ot and common:
+                mapping_field = next(iter(common))
+                rt_create = await cli_agent.run_cli(
+                    "bkn", "relation-type", "create", kn_id,
+                    "--name", f"eval_rt_{int(time.time())}",
+                    "--source", src_ot,
+                    "--target", tgt_ot,
+                    "--mapping", f"{mapping_field}:{mapping_field}",
+                )
+                steps.append(rt_create)
+                scorer.assert_exit_code(
+                    rt_create, 0, "relation-type create",
+                )
+                if isinstance(rt_create.parsed_json, dict):
+                    rt_id = str(
+                        rt_create.parsed_json.get("id") or "",
+                    )
+
+                if rt_id:
+                    rt_get = await cli_agent.run_cli(
+                        "bkn", "relation-type", "get", kn_id, rt_id,
+                    )
+                    steps.append(rt_get)
+                    scorer.assert_exit_code(
+                        rt_get, 0, "relation-type get",
+                    )
+                    scorer.assert_json(
+                        rt_get, "relation-type get returns JSON",
+                    )
+
+                    rt_delete = await cli_agent.run_cli(
+                        "bkn", "relation-type", "delete", kn_id,
+                        rt_id, "-y",
+                    )
+                    steps.append(rt_delete)
+                    scorer.assert_exit_code(
+                        rt_delete, 0, "relation-type delete",
+                    )
 
     finally:
         if kn_id:

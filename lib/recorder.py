@@ -48,11 +48,102 @@ class Recorder:
                 f.write("\n")
 
     def flush(self) -> Path:
-        """Write results.json and return path to run directory."""
+        """Write results.json + report.md and return path to run directory."""
         results_path = self._run_dir / "results.json"
         with open(results_path, "w", encoding="utf-8") as f:
             json.dump(self._results, f, indent=2, ensure_ascii=False)
+
+        md_path = self._run_dir / "report.md"
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(self._render_markdown())
         return self._run_dir
+
+    def _render_markdown(self) -> str:
+        """Render results as a readable Markdown report (Chinese)."""
+        total = len(self._results)
+        passed = sum(1 for r in self._results if r["status"] == "pass")
+        failed = sum(1 for r in self._results if r["status"] == "fail")
+        skipped = sum(1 for r in self._results if r["status"] == "skip")
+        rate = f"{passed / total * 100:.0f}%" if total else "N/A"
+
+        lines = [
+            "# 评估报告",
+            "",
+            f"**{total}** 用例 | "
+            f"**{passed}** 通过 | "
+            f"**{failed}** 失败 | "
+            f"**{skipped}** 跳过 | "
+            f"通过率 **{rate}**",
+            "",
+            "## 测试结果",
+            "",
+            "| 用例 | 确定性 | Judge | 发现 |",
+            "|------|--------|-------|------|",
+        ]
+        for r in self._results:
+            det = "通过" if r.get("deterministic", {}).get("passed") else "失败"
+            judge = r.get("judge")
+            if judge:
+                verdict = judge.get("verdict", "?")
+                findings = judge.get("findings", [])
+                finding_summary = self._summarize_findings(findings)
+            else:
+                verdict = "-"
+                finding_summary = ""
+            lines.append(
+                f"| {r['name']} | {det} | {verdict} | {finding_summary} |",
+            )
+
+        # Failures detail
+        failures = [r for r in self._results if r["status"] == "fail"]
+        if failures:
+            lines.extend(["", "## 失败详情", ""])
+            for r in failures:
+                lines.append(f"### {r['name']}")
+                det = r.get("deterministic", {})
+                for f in det.get("failures", []):
+                    lines.append(f"- {f}")
+                judge = r.get("judge")
+                if judge:
+                    for f in judge.get("findings", []):
+                        sev = f.get("severity", "?")
+                        msg = f.get("message", "")
+                        lines.append(f"- **[{sev}]** {msg}")
+                lines.append("")
+
+        # Judge findings (warn/medium+)
+        warn_cases = [
+            r for r in self._results
+            if (r.get("judge") or {}).get("verdict") == "warn"
+        ]
+        if warn_cases:
+            lines.extend(["## 警告项", ""])
+            for r in warn_cases:
+                findings = r.get("judge", {}).get("findings", [])
+                notable = [
+                    f for f in findings
+                    if f.get("severity") in ("medium", "high", "critical")
+                ]
+                if notable:
+                    lines.append(f"**{r['name']}**")
+                    for f in notable:
+                        lines.append(
+                            f"- [{f.get('severity')}] {f.get('message', '')}",
+                        )
+                    lines.append("")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _summarize_findings(findings: list[dict]) -> str:
+        if not findings:
+            return ""
+        by_sev: dict[str, int] = {}
+        for f in findings:
+            sev = f.get("severity", "?")
+            by_sev[sev] = by_sev.get(sev, 0) + 1
+        return ", ".join(f"{c}x {s}" for s, c in by_sev.items())
 
     def write_report(self, report: dict) -> None:
         """Write aggregate report."""
