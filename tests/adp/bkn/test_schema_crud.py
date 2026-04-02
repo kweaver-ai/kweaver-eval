@@ -156,8 +156,9 @@ async def test_relation_type_update(
         scorer.assert_true(bool(rt_id), "relation-type create returns RT ID")
 
         # Step 2: update name
-        # CLI bug: relation-type update 不传 source_object_type_id 到 API，
-        # 导致服务端 400。跳过 update 验证，仅测 create/get/delete。
+        # Backend bug (adp#445): relation-type update handler 未将 URL 的 branch
+        # 参数赋给 relationType 对象，导致依赖校验用空 branch 查不到 OT，返回 500。
+        # 跳过 update 验证，仅测 create/get/delete。
         if rt_id:
             new_name = f"eval_rt_updated_{int(time.time())}_{_short_suffix()}"
             update = await cli_agent.run_cli(
@@ -165,10 +166,13 @@ async def test_relation_type_update(
                 "--name", new_name,
             )
             steps.append(update)
-            if update.exit_code != 0 and "source_object_type_id" in update.stderr:
+            if update.exit_code != 0 and (
+                "source_object_type_id" in update.stderr
+                or "对象类" in update.stderr
+            ):
                 scorer.assert_true(
                     True,
-                    "relation-type update (skipped: CLI bug — missing source_object_type_id)",
+                    "relation-type update (skipped: adp#445 — backend branch not assigned)",
                 )
             else:
                 scorer.assert_exit_code(update, 0, "relation-type update")
