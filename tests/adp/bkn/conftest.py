@@ -5,12 +5,78 @@ db_credentials fixture is inherited from tests/adp/conftest.py.
 
 from __future__ import annotations
 
+import random
+import string
 import time
 
 import pytest
 
 from lib.agents.cli_agent import CliAgent
 
+EVAL_PREFIX = "eval_"
+
+
+def _short_suffix() -> str:
+    """Return a short random suffix like 'a3x' to avoid name collisions."""
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
+
+
+# ---------------------------------------------------------------------------
+# Resource cleanup helpers
+# ---------------------------------------------------------------------------
+
+async def _list_eval_kns(cli_agent: CliAgent) -> list[str]:
+    """Return IDs of KNs whose name starts with EVAL_PREFIX."""
+    result = await cli_agent.run_cli("bkn", "list")
+    if result.exit_code != 0 or not isinstance(result.parsed_json, list):
+        return []
+    return [
+        str(kn.get("id") or kn.get("kn_id") or "")
+        for kn in result.parsed_json
+        if str(kn.get("name", "")).startswith(EVAL_PREFIX)
+    ]
+
+
+async def _list_eval_ds(cli_agent: CliAgent) -> list[str]:
+    """Return IDs of datasources whose name starts with EVAL_PREFIX."""
+    result = await cli_agent.run_cli("ds", "list")
+    if result.exit_code != 0 or not isinstance(result.parsed_json, list):
+        return []
+    return [
+        str(ds.get("id") or ds.get("datasource_id") or "")
+        for ds in result.parsed_json
+        if str(ds.get("name", "")).startswith(EVAL_PREFIX)
+    ]
+
+
+async def _cleanup_eval_resources(cli_agent: CliAgent) -> None:
+    """Delete all eval_ prefixed KNs and DSs. Order: KN first, then DS."""
+    for kn_id in await _list_eval_kns(cli_agent):
+        if kn_id:
+            await cli_agent.run_cli("bkn", "delete", kn_id, "-y")
+
+    for ds_id in await _list_eval_ds(cli_agent):
+        if ds_id:
+            await cli_agent.run_cli("ds", "delete", ds_id, "-y")
+
+
+# ---------------------------------------------------------------------------
+# Session-level cleanup fixture
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session", autouse=True)
+async def cleanup_eval_resources(cli_agent: CliAgent):
+    """Clean up residual eval_ resources before and after the test session."""
+    # Before: clean residuals from previous interrupted runs
+    await _cleanup_eval_resources(cli_agent)
+    yield
+    # After: clean anything this session created
+    await _cleanup_eval_resources(cli_agent)
+
+
+# ---------------------------------------------------------------------------
+# KN discovery / creation helpers
+# ---------------------------------------------------------------------------
 
 async def _find_existing_kn(cli_agent: CliAgent) -> str | None:
     """Find an existing KN ID from bkn list."""
@@ -59,10 +125,66 @@ async def _find_kn_with_object_types(cli_agent: CliAgent) -> tuple[str, str] | N
     return None
 
 
+async def _find_kn_with_rich_data(
+    cli_agent: CliAgent,
+) -> tuple[str, str, list[dict]] | None:
+    """Find a KN with >=2 OTs that have common properties and queryable data.
+
+    Returns (kn_id, first_ot_id, ot_entries) or None.
+    This ensures downstream tests (relation-type update, object-type properties)
+    have the data they need.
+    """
+    result = await cli_agent.run_cli("bkn", "list")
+    if result.exit_code != 0 or not isinstance(result.parsed_json, list):
+        return None
+
+    for kn in result.parsed_json:
+        kn_id = str(kn.get("kn_id") or kn.get("id") or "")
+        if not kn_id:
+            continue
+        ot_result = await cli_agent.run_cli("bkn", "object-type", "list", kn_id)
+        ot_entries = ot_result.parsed_json
+        if isinstance(ot_entries, dict):
+            ot_entries = ot_entries.get("entries", [])
+        if ot_result.exit_code != 0 or not isinstance(ot_entries, list) or len(ot_entries) < 2:
+            continue
+
+        # Check first OT is queryable
+        first_ot_id = str(ot_entries[0].get("id") or ot_entries[0].get("ot_id") or "")
+        if not first_ot_id:
+            continue
+        probe = await cli_agent.run_cli(
+            "bkn", "object-type", "query", kn_id, first_ot_id, "--limit", "1",
+        )
+        if probe.exit_code != 0:
+            continue
+
+        # Check that at least 2 OTs share a common property (for RT tests)
+        second_ot_id = str(ot_entries[1].get("id") or ot_entries[1].get("ot_id") or "")
+        if not second_ot_id:
+            continue
+        src_get = await cli_agent.run_cli("bkn", "object-type", "get", kn_id, first_ot_id)
+        tgt_get = await cli_agent.run_cli("bkn", "object-type", "get", kn_id, second_ot_id)
+        src_props: set[str] = set()
+        tgt_props: set[str] = set()
+        for get_r, prop_set in [(src_get, src_props), (tgt_get, tgt_props)]:
+            if isinstance(get_r.parsed_json, dict):
+                entry = get_r.parsed_json
+                if "entries" in entry:
+                    entry = (entry["entries"] or [{}])[0]
+                for p in entry.get("data_properties") or []:
+                    prop_set.add(p.get("name", ""))
+        common = src_props & tgt_props - {""}
+        if common:
+            return kn_id, first_ot_id, ot_entries
+
+    return None
+
+
 async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str] | None:
     """Create a datasource + KN from DB credentials. Returns (ds_id, kn_id) or None on failure."""
-    ds_name = f"eval_fixture_{int(time.time())}"
-    kn_name = f"eval_kn_{int(time.time())}"
+    ds_name = f"{EVAL_PREFIX}fixture_{int(time.time())}_{_short_suffix()}"
+    kn_name = f"{EVAL_PREFIX}kn_{int(time.time())}_{_short_suffix()}"
 
     # Step 1: ds connect
     connect = await cli_agent.run_cli(
@@ -96,6 +218,10 @@ async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str
     return ds_id, kn_id
 
 
+# ---------------------------------------------------------------------------
+# Session-scoped KN fixtures
+# ---------------------------------------------------------------------------
+
 @pytest.fixture(scope="session")
 async def kn_id(cli_agent: CliAgent, db_credentials: dict):
     """Ensure a KN exists. Fast path: use existing. Slow path: create from DB."""
@@ -111,15 +237,24 @@ async def kn_id(cli_agent: CliAgent, db_credentials: dict):
         pytest.skip("Cannot create KN (ds connect failed)")
     ds_id, kn_id = result
     yield kn_id
-    # Cleanup
-    await cli_agent.run_cli("bkn", "delete", kn_id, "-y")
-    await cli_agent.run_cli("ds", "delete", ds_id, "-y")
+    # Cleanup handled by cleanup_eval_resources fixture
 
 
 @pytest.fixture(scope="session")
 async def kn_with_data(cli_agent: CliAgent, db_credentials: dict):
-    """Ensure a KN with object types exists. Returns (kn_id, ot_name)."""
-    # Fast path: find existing KN with data
+    """Ensure a KN with rich data exists. Returns (kn_id, ot_id).
+
+    Prefers KNs with >=2 OTs sharing common properties, so downstream tests
+    (relation-type update, object-type properties) can run without skipping.
+    """
+    # Fast path: find existing KN with rich data
+    rich = await _find_kn_with_rich_data(cli_agent)
+    if rich:
+        kn_id, ot_id, _ = rich
+        yield kn_id, ot_id
+        return
+
+    # Fallback: find any KN with at least one queryable OT
     found = await _find_kn_with_object_types(cli_agent)
     if found:
         yield found
@@ -141,11 +276,7 @@ async def kn_with_data(cli_agent: CliAgent, db_credentials: dict):
         ot_id = str(ot.get("id") or ot.get("ot_id") or "")
         if ot_id:
             yield kn_id, ot_id
-            await cli_agent.run_cli("bkn", "delete", kn_id, "-y")
-            await cli_agent.run_cli("ds", "delete", ds_id, "-y")
             return
 
     # Still no OT — skip (build required but too slow for fixture)
-    await cli_agent.run_cli("bkn", "delete", kn_id, "-y")
-    await cli_agent.run_cli("ds", "delete", ds_id, "-y")
     pytest.skip("No KN with object types available (build required)")

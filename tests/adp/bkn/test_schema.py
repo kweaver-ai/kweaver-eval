@@ -46,7 +46,6 @@ async def test_bkn_object_type_query(
     assert det.passed, det.failures
 
 
-@pytest.mark.tbd("Needs KN with primary_key set — should move to lifecycle")
 async def test_bkn_object_type_properties(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
     kn_with_data: tuple[str, str],
@@ -67,18 +66,26 @@ async def test_bkn_object_type_properties(
         pytest.skip("No instances available for properties query")
     instance = entries[0] if isinstance(entries, list) else entries
 
-    # Get OT schema to find primary key
+    # Get OT schema to find primary key(s)
     ot_get = await cli_agent.run_cli("bkn", "object-type", "get", kn_id, ot_id)
     if ot_get.exit_code != 0 or not isinstance(ot_get.parsed_json, dict):
         pytest.skip("Cannot get object type schema")
     ot_data = ot_get.parsed_json
     if "entries" in ot_data and isinstance(ot_data["entries"], list):
         ot_data = ot_data["entries"][0] if ot_data["entries"] else {}
-    pk_name = ot_data.get("primary_key") or ot_data.get("display_key") or ""
-    if not pk_name:
-        # Fallback: use first key from instance
-        pk_name = next(iter(instance.keys()), "")
-    if not pk_name or pk_name not in instance:
+
+    # Prefer _instance_identity from query result (contains full composite key)
+    identity = instance.get("_instance_identity")
+    if not identity:
+        # Fallback: build from primary_keys (plural) or display_key
+        pk_names = ot_data.get("primary_keys") or []
+        if not pk_names:
+            pk_name = ot_data.get("display_key") or ot_data.get("primary_key") or ""
+            pk_names = [pk_name] if pk_name else []
+        if not pk_names:
+            pk_names = [next(iter(instance.keys()), "")]
+        identity = {k: instance[k] for k in pk_names if k in instance}
+    if not identity:
         pytest.skip("Cannot determine primary key for properties query")
 
     import json
@@ -87,7 +94,7 @@ async def test_bkn_object_type_properties(
     if not data_props:
         data_props = list(instance.keys())[:3]
     props_body = json.dumps({
-        "_instance_identities": [{pk_name: instance[pk_name]}],
+        "_instance_identities": [identity],
         "properties": data_props,
     }, ensure_ascii=False)
     result = await cli_agent.run_cli(
