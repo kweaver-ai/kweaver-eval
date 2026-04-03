@@ -11,7 +11,6 @@ from .conftest import _agent_name
 
 
 @pytest.mark.destructive
-@pytest.mark.known_bug("Backend nil pointer dereference in FillPublishedByName on publish")
 async def test_agent_publish_unpublish(
     cli_agent: CliAgent, scorer: Scorer, eval_case, llm_id: str,
 ):
@@ -39,6 +38,8 @@ async def test_agent_publish_unpublish(
         # Step 2: publish
         publish = await cli_agent.run_cli("agent", "publish", agent_id)
         steps.append(publish)
+        if publish.exit_code != 0 and "Permission" in publish.stderr:
+            pytest.skip("Current user does not have publish permission")
         scorer.assert_exit_code(publish, 0, "agent publish")
 
         # Step 3: unpublish
