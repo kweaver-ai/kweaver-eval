@@ -14,7 +14,6 @@ _MODULE_MARKERS = {
     "agent": "agent",
     "bkn": "bkn",
     "vega": "vega",
-    "ds": "ds",
     "context_loader": "context_loader",
     "dataflow": "dataflow",
     "execution_factory": "execution_factory",

@@ -51,6 +51,38 @@ async def resource_id(cli_agent: CliAgent) -> str:
 
 
 @pytest.fixture(scope="session")
+async def ds_id(cli_agent: CliAgent) -> str:
+    """Find the first available datasource ID. Skips if none found."""
+    result = await cli_agent.run_cli("ds", "list")
+    if result.exit_code != 0 or not isinstance(result.parsed_json, dict):
+        pytest.skip("Cannot list datasources")
+    entries = result.parsed_json.get("entries", [])
+    if not isinstance(entries, list) or len(entries) == 0:
+        pytest.skip("No datasources available")
+    ds = entries[0]
+    did = str(ds.get("id") or ds.get("ds_id") or ds.get("datasource_id", ""))
+    if not did:
+        pytest.skip("Cannot determine datasource ID")
+    return did
+
+
+@pytest.fixture(scope="session")
+async def dataview_id(cli_agent: CliAgent) -> str:
+    """Find the first available dataview ID. Skips if none found."""
+    result = await cli_agent.run_cli("dataview", "list", "--limit", "5")
+    if result.exit_code != 0:
+        pytest.skip("Cannot list dataviews")
+    parsed = result.parsed_json
+    entries = parsed if isinstance(parsed, list) else (parsed or {}).get("entries") or []
+    if not isinstance(entries, list) or len(entries) == 0:
+        pytest.skip("No dataviews available")
+    dvid = str(entries[0].get("id") or "")
+    if not dvid:
+        pytest.skip("Cannot determine dataview ID")
+    return dvid
+
+
+@pytest.fixture(scope="session")
 def vega_connector_config(db_credentials: dict) -> str:
     """Build connector_config JSON string for vega catalog create.
 

@@ -66,10 +66,9 @@ database to avoid polluting existing data.
 |--------|-------|------|-----------|----------|
 | Agent | 11 | 10 | 1 | 0 |
 | BKN | 26 | 25 | 1 | 0 |
+| Vega (+ DS + Dataview) | 27 | 19 | 6 | 2 |
 | Context Loader | 3 | 3 | 0 | 0 |
-| DS | 3 | 3 | 0 | 0 |
-| Vega | 19 | 13 | 4 | 2 |
-| **Total** | **62** | **54 (87%)** | **6** | **2** |
+| **Total** | **67** | **57 (85%)** | **8** | **2** |
 
 ### Agent (Decision Agent)
 
@@ -124,7 +123,9 @@ database to avoid polluting existing data.
 **Known Bug:**
 - **action execute invalid identity** ([adp#442](https://github.com/kweaver-ai/adp/issues/442)): returns 500 instead of 400 for invalid `_instance_identities`.
 
-### Vega (Metadata Engine)
+### Vega (Metadata Engine + DS + Dataview)
+
+#### Vega Core
 
 | Capability | CLI Command | Test | Status |
 |------------|-------------|------|--------|
@@ -148,19 +149,30 @@ database to avoid polluting existing data.
 | Dataset Lifecycle | `vega resource create/update-docs/build` | `test_vega_dataset_lifecycle` | wait_for_env |
 | Query Execute | `vega resource query` (cross-resource) | `test_vega_query_execute` | wait_for_env |
 
-**Known Bugs:**
-- **connector-type get 404** ([adp#427](https://github.com/kweaver-ai/adp/issues/427)): handler reads `c.Param("id")` but route defines `:type`.
-- **discovery-task list 404** ([adp#428](https://github.com/kweaver-ai/adp/issues/428)): handler requires catalog_id but route has no path param.
-- **catalog resources 500** ([adp#447](https://github.com/kweaver-ai/adp/issues/447)): `FilterResources` sends empty resources array to Hydra when catalog has no resources.
-- **resource list-all 404** ([adp#448](https://github.com/kweaver-ai/adp/issues/448)): `ListResources` handler returns 404 instead of 400 when `resource_type` param missing.
-
-### DS (Datasource)
+#### Datasource (DS)
 
 | Capability | CLI Command | Test | Status |
 |------------|-------------|------|--------|
 | DS List | `ds list` | `test_datasource_list` | pass |
 | DS Get | `ds get` | `test_datasource_get` | pass |
 | DS Tables | `ds tables` | `test_datasource_tables` | pass |
+| DS Connect & Delete | `ds connect / delete` | `test_datasource_connect_and_delete` | known_bug |
+
+#### Dataview
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Dataview List | `dataview list` | `test_dataview_list` | pass |
+| Dataview Get | `dataview get` | `test_dataview_get` | pass |
+| Dataview Find | `dataview find` | `test_dataview_find` | pass |
+| Dataview Query | `dataview query` | `test_dataview_query` | pass |
+
+**Known Bugs:**
+- **connector-type get 404** ([adp#427](https://github.com/kweaver-ai/adp/issues/427)): handler reads `c.Param("id")` but route defines `:type`.
+- **discovery-task list 404** ([adp#428](https://github.com/kweaver-ai/adp/issues/428)): handler requires catalog_id but route has no path param.
+- **catalog resources 500** ([adp#447](https://github.com/kweaver-ai/adp/issues/447)): `FilterResources` sends empty resources array to Hydra when catalog has no resources.
+- **resource list-all 404** ([adp#448](https://github.com/kweaver-ai/adp/issues/448)): `ListResources` handler returns 404 instead of 400 when `resource_type` param missing.
+- **ds delete 500**: backend database error when deleting datasource on dip.aishu.cn.
 
 ### Context Loader
 
@@ -188,8 +200,7 @@ tests/
 ├── adp/                    # ADP product line
 │   ├── agent/              # Agent: CRUD, chat, sessions, history, trace, publish
 │   ├── bkn/                # BKN: list, export, search, schema, actions, lifecycle
-│   ├── vega/               # Vega: health, catalogs, resources, connector-types, lifecycle
-│   ├── ds/                 # DS: list, get, tables
+│   ├── vega/               # Vega: health, catalogs, resources, DS, dataview, lifecycle
 │   ├── context_loader/     # Context Loader / MCP
 │   ├── dataflow/           # Dataflow (pending CLI)
 │   └── execution_factory/  # Execution Factory (pending CLI)
@@ -210,8 +221,7 @@ make test-report         # Full run with aggregate report
 # Per-module
 make test-agent          # Agent module only
 make test-bkn            # BKN module only
-make test-vega           # Vega module only
-make test-ds             # Datasource module only
+make test-vega           # Vega module only (includes DS + Dataview)
 make test-context-loader # Context Loader module only
 ```
 

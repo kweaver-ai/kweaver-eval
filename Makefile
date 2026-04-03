@@ -1,5 +1,5 @@
 .PHONY: test test-at test-at-full test-smoke test-report lint ci install
-.PHONY: test-agent test-bkn test-vega test-ds test-context-loader
+.PHONY: test-agent test-bkn test-vega test-context-loader
 
 install:
 	pip install -e ".[dev]"
@@ -42,7 +42,5 @@ test-bkn:
 	python3 -m pytest tests/adp/bkn/ -v -s --tb=short -m api
 test-vega:
 	python3 -m pytest tests/adp/vega/ -v -s --tb=short -m api
-test-ds:
-	python3 -m pytest tests/adp/ds/ -v -s --tb=short -m api
 test-context-loader:
 	python3 -m pytest tests/adp/context_loader/ -v -s --tb=short -m api
