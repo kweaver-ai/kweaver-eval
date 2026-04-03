@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
@@ -46,6 +48,7 @@ async def test_vega_catalog_test_connection(
     assert det.passed, det.failures
 
 
+@pytest.mark.known_bug("adp#447: catalog resources returns 500 when catalog has no resources — FilterResources not guarded against empty ids")
 async def test_vega_catalog_resources(
     cli_agent: CliAgent, scorer: Scorer, eval_case, catalog_id: str
 ):

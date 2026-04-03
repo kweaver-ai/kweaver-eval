@@ -1,5 +1,5 @@
 .PHONY: test test-at test-at-full test-smoke test-report lint ci install
-.PHONY: test-bkn test-vega test-ds test-context-loader
+.PHONY: test-agent test-bkn test-vega test-ds test-context-loader
 
 install:
 	pip install -e ".[dev]"
@@ -36,6 +36,8 @@ lint:
 ci: lint test-at
 
 # Per-module shortcuts
+test-agent:
+	python3 -m pytest tests/adp/agent/ -v -s --tb=short -m api
 test-bkn:
 	python3 -m pytest tests/adp/bkn/ -v -s --tb=short -m api
 test-vega:

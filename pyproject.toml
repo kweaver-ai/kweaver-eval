@@ -25,6 +25,7 @@ markers = [
     "smoke: minimal subset for quick health check",
     "destructive: test mutates server state (requires EVAL_RUN_DESTRUCTIVE=1)",
     "adp: AI Data Platform",
+    "agent: Decision Agent",
     "bkn: Business Knowledge Network",
     "vega: Vega engine",
     "ds: Datasource",

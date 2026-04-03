@@ -11,6 +11,7 @@ from lib.agents.cli_agent import CliAgent
 
 # Directory name → pytest marker mapping
 _MODULE_MARKERS = {
+    "agent": "agent",
     "bkn": "bkn",
     "vega": "vega",
     "ds": "ds",
