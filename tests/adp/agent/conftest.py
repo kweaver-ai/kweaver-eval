@@ -362,16 +362,19 @@ def _build_explore_config_with_kn(
 
 @pytest.fixture(scope="session")
 async def owned_agent_with_kn(
-    cli_agent: CliAgent, llm_id: str, db_credentials: dict,
+    cli_agent: CliAgent, llm_id: str, request: pytest.FixtureRequest,
 ) -> dict:
     """Create an eval agent bound to a KN with real data.
 
     Returns dict with 'agent_id', 'kn_id', 'ot_id'.
     Fast path: discover existing KN. Slow path: create from DB.
+    db_credentials is only requested when the fast path fails.
     """
     # Step 1: discover or create KN
     found = await _find_kn_with_queryable_ot(cli_agent)
     if not found:
+        # Slow path — need DB credentials to create a KN
+        db_credentials = request.getfixturevalue("db_credentials")
         found = await _create_kn_for_agent(cli_agent, db_credentials)
     if not found:
         pytest.skip("No KN with queryable data available and cannot create one")
