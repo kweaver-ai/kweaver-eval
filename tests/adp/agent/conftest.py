@@ -354,9 +354,9 @@ def _build_explore_config_with_kn(
             "如果知识网络中有相关信息，请基于这些信息回答。回答尽量简洁准确。"
         ),
     )
-    kn_ref = {"id": kn_id, "name": kn_name}
-    config["data_source"]["kg"] = [kn_ref]
-    config["data_source"]["knowledge_network"] = [kn_ref]
+    config["data_source"]["knowledge_network"] = [
+        {"knowledge_network_id": kn_id, "knowledge_network_name": kn_name},
+    ]
     return config
 
 
