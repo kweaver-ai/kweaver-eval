@@ -25,6 +25,7 @@ async def test_vega_discovery_task_list(cli_agent: CliAgent, scorer: Scorer, eva
     assert det.passed, det.failures
 
 
+@pytest.mark.known_bug("discovery-task subcommand removed from SDK; use catalog discover --wait instead")
 async def test_vega_discovery_task_get(
     cli_agent: CliAgent, scorer: Scorer, eval_case, catalog_id: str,
 ):
