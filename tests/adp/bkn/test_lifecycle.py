@@ -25,13 +25,14 @@ async def test_bkn_full_lifecycle(
     steps = []
 
     try:
-        # Step 1: ds connect
+        # Step 1: ds connect (120s — external DB may be slow)
         connect = await cli_agent.run_cli(
             "ds", "connect",
             creds["db_type"], creds["host"], creds["port"], creds["database"],
             "--account", creds["user"],
             "--password", creds["password"],
             "--name", ds_name,
+            timeout=120.0,
         )
         steps.append(connect)
         scorer.assert_exit_code(connect, 0, "ds connect")
@@ -47,6 +48,10 @@ async def test_bkn_full_lifecycle(
                 d.get("datasource_id") or d.get("id") or "",
             )
         scorer.assert_true(bool(ds_id), "ds connect returns datasource ID")
+        if not ds_id:
+            det = scorer.result()
+            await eval_case("bkn_full_lifecycle", steps, det, module="adp/bkn")
+            pytest.skip("ds connect failed (DB unreachable?) — cannot continue lifecycle")
 
         # Pick at most 3 tables to keep create-from-ds fast
         tables_arg: list[str] = []

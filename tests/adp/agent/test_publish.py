@@ -38,7 +38,8 @@ async def test_agent_publish_unpublish(
         # Step 2: publish
         publish = await cli_agent.run_cli("agent", "publish", agent_id)
         steps.append(publish)
-        if publish.exit_code != 0 and "Permission" in publish.stderr:
+        combined = publish.stdout + publish.stderr
+        if publish.exit_code != 0 and "Permission" in combined:
             pytest.skip("Current user does not have publish permission")
         scorer.assert_exit_code(publish, 0, "agent publish")
 

@@ -10,12 +10,30 @@ probe assertions at key checkpoints, with judge agent for semantic evaluation.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
 from .test_chat import _extract_conversation_id
+
+logger = logging.getLogger(__name__)
+
+
+def _assert_hard_only(det) -> None:
+    """Assert only on hard (exit code) failures; log soft failures as warnings.
+
+    Soft failures (e.g. content recall mismatches) are deferred to the judge
+    agent for semantic evaluation. This helper ensures they are still visible
+    in test output.
+    """
+    soft = [f for f in det.failures if "exit code" not in f.lower()]
+    hard = [f for f in det.failures if "exit code" in f.lower()]
+    if soft:
+        logger.warning("Soft failures deferred to judge: %s", soft)
+    assert not hard, det.failures
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +71,11 @@ async def _chat_turn(
 
 
 def _stdout(result) -> str:
+    """Normalize stdout for assertion matching.
+
+    .lower() is applied for case-insensitive English keyword matching
+    (e.g. IP addresses, tech terms). Chinese keywords are unaffected.
+    """
     return result.stdout.strip().lower()
 
 
@@ -133,8 +156,7 @@ async def test_context_long_range_fact_retention(
             ),
         },
     )
-    hard_failures = [f for f in det.failures if "exit code" in f.lower()]
-    assert not hard_failures, det.failures
+    _assert_hard_only(det)
 
 
 # ---------------------------------------------------------------------------
@@ -203,8 +225,7 @@ async def test_context_coreference_resolution(
             ),
         },
     )
-    hard_failures = [f for f in det.failures if "exit code" in f.lower()]
-    assert not hard_failures, det.failures
+    _assert_hard_only(det)
 
 
 # ---------------------------------------------------------------------------
@@ -282,8 +303,7 @@ async def test_context_intent_correction(
             ),
         },
     )
-    hard_failures = [f for f in det.failures if "exit code" in f.lower()]
-    assert not hard_failures, det.failures
+    _assert_hard_only(det)
 
 
 # ---------------------------------------------------------------------------
@@ -347,8 +367,7 @@ async def test_context_topic_switch_return(
             ),
         },
     )
-    hard_failures = [f for f in det.failures if "exit code" in f.lower()]
-    assert not hard_failures, det.failures
+    _assert_hard_only(det)
 
 
 # ---------------------------------------------------------------------------
@@ -418,8 +437,7 @@ async def test_context_role_consistency(
             ),
         },
     )
-    hard_failures = [f for f in det.failures if "exit code" in f.lower()]
-    assert not hard_failures, det.failures
+    _assert_hard_only(det)
 
 
 # ---------------------------------------------------------------------------
@@ -498,5 +516,4 @@ async def test_context_no_instruction_leakage(
             ),
         },
     )
-    hard_failures = [f for f in det.failures if "exit code" in f.lower()]
-    assert not hard_failures, det.failures
+    _assert_hard_only(det)

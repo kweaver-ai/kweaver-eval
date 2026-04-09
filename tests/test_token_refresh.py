@@ -18,12 +18,26 @@ from lib.scorer import Scorer
 def _find_token_file() -> Path | None:
     """Find token.json for the current platform.
 
-    CLI stores tokens at ~/.kweaver/platforms/<base64-url>/token.json.
+    CLI stores tokens at ~/.kweaver/platforms/<base64url>/token.json where
+    the key is base64url(baseUrl) with no padding — same encoding as the CLI.
+    Uses KWEAVER_BASE_URL to target the correct platform directory, falling
+    back to a sorted scan when KWEAVER_BASE_URL is not set.
     """
+    import base64
+    import os
+
     platforms_dir = Path.home() / ".kweaver" / "platforms"
     if not platforms_dir.is_dir():
         return None
-    for platform_dir in platforms_dir.iterdir():
+
+    base_url = os.environ.get("KWEAVER_BASE_URL", "").rstrip("/")
+    if base_url:
+        platform_key = base64.urlsafe_b64encode(base_url.encode()).rstrip(b"=").decode()
+        token_file = platforms_dir / platform_key / "token.json"
+        return token_file if token_file.exists() else None
+
+    # Fallback: iterate in sorted order for determinism
+    for platform_dir in sorted(platforms_dir.iterdir()):
         if platform_dir.is_dir():
             token_file = platform_dir / "token.json"
             if token_file.exists():

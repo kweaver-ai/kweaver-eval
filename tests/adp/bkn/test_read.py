@@ -30,6 +30,7 @@ async def test_bkn_export(cli_agent: CliAgent, scorer: Scorer, eval_case, kn_id:
     assert det.passed, det.failures
 
 
+@pytest.mark.known_bug("bkn search returns markdown-wrapped output (backtick-quoted) instead of clean JSON when vectorizer is enabled")
 async def test_bkn_search(cli_agent: CliAgent, scorer: Scorer, eval_case, kn_id: str):
     """bkn search returns results for a query."""
     result = await cli_agent.run_cli("bkn", "search", kn_id, "test")

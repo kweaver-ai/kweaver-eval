@@ -31,9 +31,41 @@ class CliAgent(BaseAgent):
             usage={"exit_code": result.exit_code},
         )
 
-    async def run_cli(self, *args: str, timeout: float = 60.0) -> CliResult:
-        """Run kweaver CLI command as subprocess."""
+    _TLS_TRANSIENT_MARKERS = (
+        "socket disconnected before secure TLS connection",
+        "ECONNRESET",
+        "ETIMEDOUT",
+        "socket hang up",
+    )
+
+    async def run_cli(
+        self,
+        *args: str,
+        timeout: float = 60.0,
+        retries: int = 2,
+    ) -> CliResult:
+        """Run kweaver CLI command as subprocess.
+
+        Retries up to *retries* times on transient TLS failures.
+        """
         cmd = [self._cli, *args]
+        last_result: CliResult | None = None
+
+        for attempt in range(1 + retries):
+            result = await self._exec_once(cmd, timeout=timeout)
+            if result.exit_code == 0 or not self._is_tls_transient(result.stderr):
+                return result
+            last_result = result
+            if attempt < retries:
+                await asyncio.sleep(1.0 * (attempt + 1))
+
+        assert last_result is not None
+        return last_result
+
+    async def _exec_once(
+        self, cmd: list[str], *, timeout: float
+    ) -> CliResult:
+        """Execute a single CLI invocation."""
         start = time.monotonic()
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -76,6 +108,10 @@ class CliAgent(BaseAgent):
             duration_ms=elapsed,
             parsed_json=parsed,
         )
+
+    @classmethod
+    def _is_tls_transient(cls, stderr: str) -> bool:
+        return any(m in stderr for m in cls._TLS_TRANSIENT_MARKERS)
 
     @staticmethod
     def _filter_noise(stderr: str) -> str:

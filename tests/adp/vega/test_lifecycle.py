@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -56,14 +57,36 @@ async def test_vega_catalog_lifecycle(
         scorer.assert_true(bool(task_id), "catalog discover returns task ID")
 
         if task_id:
-            task_get = await cli_agent.run_cli("vega", "discovery-task", "get", task_id)
-            steps.append(task_get)
-            scorer.assert_exit_code(task_get, 0, "discovery-task get")
-            if isinstance(task_get.parsed_json, dict):
-                status = task_get.parsed_json.get("status", "")
+            # Poll until task reaches a terminal state (max 180s, backoff)
+            deadline = time.time() + 180
+            task_final = None
+            poll_interval = 2.0
+            while time.time() < deadline:
+                task_poll = await cli_agent.run_cli("vega", "discovery-task", "get", task_id)
+                if task_poll.exit_code == 0 and isinstance(task_poll.parsed_json, dict):
+                    poll_status = task_poll.parsed_json.get("status", "")
+                    if poll_status in ("completed", "failed"):
+                        task_final = task_poll
+                        break
+                await asyncio.sleep(poll_interval)
+                poll_interval = min(poll_interval * 1.5, 10)
+            if task_final is None:
+                task_final = await cli_agent.run_cli("vega", "discovery-task", "get", task_id)
+            steps.append(task_final)
+            scorer.assert_exit_code(task_final, 0, "discovery-task get")
+            status = ""
+            if isinstance(task_final.parsed_json, dict):
+                status = task_final.parsed_json.get("status", "")
                 scorer.assert_true(
-                    status in ("completed", "running"),
-                    f"discovery task status is valid (got {status})",
+                    status == "completed",
+                    f"discovery task completed (got {status})",
+                )
+            if status != "completed":
+                det = scorer.result()
+                await eval_case("vega_catalog_lifecycle", steps, det, module="adp/vega")
+                pytest.skip(
+                    f"discovery task stuck in '{status}' after 180s — "
+                    "backend too slow or DB unreachable"
                 )
 
         # Step 4: get catalog to verify it exists

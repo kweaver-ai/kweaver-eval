@@ -90,7 +90,8 @@ async def test_agent_chat_multi_turn(
     )
     # Allow pass even if deterministic name check fails — judge agent is
     # the authoritative evaluator for context recall.
-    hard_failures = [f for f in det.failures if "recalls context" not in f]
+    _SOFT_LABELS = {"recalls context"}
+    hard_failures = [f for f in det.failures if not any(s in f for s in _SOFT_LABELS)]
     assert not hard_failures, det.failures
 
 

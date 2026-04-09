@@ -62,15 +62,19 @@ database to avoid polluting existing data.
 
 ## Test Coverage Summary
 
-| Module | Total | Pass | Known Bug | Wait Env |
-|--------|-------|------|-----------|----------|
-| Agent | 11 | 10 | 1 | 0 |
-| BKN | 26 | 25 | 1 | 0 |
-| Vega (+ DS + Dataview) | 27 | 19 | 6 | 2 |
-| Context Loader | 3 | 3 | 0 | 0 |
-| **Total** | **67** | **57 (85%)** | **8** | **2** |
+| Module | Total | Pass | Known Bug | Wait Env | Wait CLI |
+|--------|-------|------|-----------|----------|----------|
+| Agent | 33 | 33 | 0 | 0 | 0 |
+| BKN | 26 | 23 | 3 | 0 | 0 |
+| Vega (+ DS + Dataview) | 27 | 19 | 6 | 2 | 0 |
+| Dataflow | 14 | 0 | 0 | 0 | 14 |
+| Context Loader | 3 | 3 | 0 | 0 | 0 |
+| Token Refresh | 1 | 1 | 0 | 0 | 0 |
+| **Total** | **104** | **79 (76%)** | **9** | **2** | **14** |
 
 ### Agent (Decision Agent)
+
+#### Read & CRUD
 
 | Capability | CLI Command | Test | Status |
 |------------|-------------|------|--------|
@@ -78,16 +82,60 @@ database to avoid polluting existing data.
 | Agent Get | `agent get` | `test_agent_get` | pass (destructive) |
 | Agent Get by Key | `agent get-by-key` | `test_agent_get_by_key` | pass (destructive) |
 | Agent CRUD Lifecycle | `agent create/get/update/delete` | `test_agent_crud_lifecycle` | pass (destructive) |
+| Config Update | `agent update --system-prompt` | `test_agent_config_update` | pass (destructive) |
+| Publish/Unpublish | `agent publish/unpublish` | `test_agent_publish_unpublish` | pass (destructive) |
+
+#### Chat
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
 | Chat Single Turn | `agent chat -m ... --no-stream` | `test_agent_chat_single_turn` | pass |
 | Chat Multi Turn | `agent chat -m ... -cid ...` | `test_agent_chat_multi_turn` | pass |
 | Chat Streaming | `agent chat -m ... --stream` | `test_agent_chat_stream` | pass |
+
+#### Chat Robustness
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Stream Chunk Integrity | `agent chat --stream` vs `--no-stream` | `test_stream_chunk_integrity` | pass (destructive) |
+| Stream with Knowledge | `agent chat --stream` | `test_stream_with_knowledge_retrieval` | pass (destructive) |
+| Long Message Input | `agent chat -m <2KB+>` | `test_long_message_input` | pass (destructive) |
+| Special Chars in Query | `agent chat -m <special chars>` | `test_special_chars_in_query` | pass (destructive) |
+| Knowledge Multi-Turn | `agent chat -cid ...` (3-turn drill-down) | `test_knowledge_multi_turn_drill_down` | pass (destructive) |
+| Expired/Foreign CID | `agent chat -cid <foreign>` | `test_cid_expired_or_foreign` | pass (destructive) |
+| CID Reuse After Gap | `agent chat -cid ...` | `test_cid_reuse_after_gap` | pass (destructive) |
+| Concurrent Sessions | `agent chat -cid ...` (parallel) | `test_concurrent_sessions_isolated` | pass (destructive) |
+| Stream Multi-Turn + KN | `agent chat --stream -cid ...` (3-turn) | `test_stream_multi_turn_with_knowledge` | pass (destructive) |
+
+#### Context Quality
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Long-Range Fact Retention | `agent chat -cid ...` (12-turn) | `test_context_long_range_fact_retention` | pass (destructive) |
+| Coreference Resolution | `agent chat -cid ...` (10-turn) | `test_context_coreference_resolution` | pass (destructive) |
+| Intent Correction | `agent chat -cid ...` (12-turn) | `test_context_intent_correction` | pass (destructive) |
+| Topic Switch & Return | `agent chat -cid ...` (13-turn) | `test_context_topic_switch_return` | pass (destructive) |
+| Role Consistency | `agent chat -cid ...` (12-turn) | `test_context_role_consistency` | pass (destructive) |
+| No Instruction Leakage | `agent chat -cid ...` (5-turn) | `test_context_no_instruction_leakage` | pass (destructive) |
+
+#### Sessions & Trace
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
 | Sessions | `agent sessions` | `test_agent_sessions` | pass |
 | History | `agent history` | `test_agent_history` | pass |
 | Trace | `agent trace` | `test_agent_trace` | pass |
-| Publish/Unpublish | `agent publish/unpublish` | `test_agent_publish_unpublish` | known_bug |
 
-**Known Bug:**
-- **Publish nil pointer** — `FillPublishedByName` dereferences nil when UM service returns `(nil, nil)`. Fix exists on branch `fix/98-nil-pointer-in-get-user-id-name-map` but not merged to main.
+#### Error Paths
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Get Invalid ID | `agent get <invalid>` | `test_agent_get_invalid_id` | pass |
+| Chat Invalid ID | `agent chat <invalid>` | `test_agent_chat_invalid_id` | pass |
+| Delete Invalid ID | `agent delete <invalid>` | `test_agent_delete_invalid_id` | pass |
+| Get by Invalid Key | `agent get-by-key <invalid>` | `test_agent_get_by_key_invalid` | pass |
+| Chat Invalid CID | `agent chat -cid <invalid>` | `test_agent_chat_invalid_cid` | pass (destructive) |
+| Create Duplicate Key | `agent create --key <dup>` | `test_agent_create_duplicate_key` | pass (destructive) |
 
 ### BKN (Business Knowledge Network)
 
@@ -96,7 +144,7 @@ database to avoid polluting existing data.
 | BKN List | `bkn list` | `test_bkn_list` | pass |
 | BKN Get | `bkn get` | `test_bkn_get` | pass |
 | BKN Export | `bkn export` | `test_bkn_export` | pass |
-| BKN Search | `bkn search` | `test_bkn_search` | pass |
+| BKN Search | `bkn search` | `test_bkn_search` | known_bug |
 | BKN Stats | `bkn stats` | `test_bkn_stats` | pass |
 | BKN Create & Delete | `bkn create / delete` | `test_bkn_create_and_delete` | pass (destructive) |
 | BKN Update | `bkn update` | `test_bkn_update` | pass (destructive) |
@@ -104,7 +152,7 @@ database to avoid polluting existing data.
 | Object Type Query | `bkn object-type query` | `test_bkn_object_type_query` | pass |
 | Object Type Properties | `bkn object-type query --properties` | `test_bkn_object_type_properties` | pass |
 | Object Type Get | `bkn object-type get` | `test_object_type_get` | pass |
-| Object Type Update | `bkn object-type update` | `test_object_type_update_property_cycle` | pass (destructive) |
+| Object Type Update | `bkn object-type update` | `test_object_type_update_property_cycle` | known_bug (destructive) |
 | Object Type Create & Delete | `bkn object-type create / delete` | `test_object_type_create_and_delete` | pass (destructive) |
 | Relation Type List | `bkn relation-type list` | `test_bkn_relation_type_list` | pass |
 | Relation Type CRUD | `bkn relation-type create/update/delete` | `test_relation_type_update` | pass (destructive) |
@@ -120,8 +168,10 @@ database to avoid polluting existing data.
 | Version Push | `bkn push` | `test_bkn_push_after_pull` | pass (destructive) |
 | Full Lifecycle | ds connect -> bkn create -> build -> query -> cleanup | `test_bkn_full_lifecycle` | pass (destructive) |
 
-**Known Bug:**
+**Known Bugs:**
 - **action execute invalid identity** ([adp#442](https://github.com/kweaver-ai/adp/issues/442)): returns 500 instead of 400 for invalid `_instance_identities`.
+- **bkn search** — returns markdown-wrapped output (backtick-quoted) instead of clean JSON when vectorizer is enabled.
+- **object-type update property cycle** — `UpdateObjectType` missing Branch assignment ([adp#445](https://github.com/kweaver-ai/adp/issues/445) fixed relation-type but object-type handler has identical unfiled bug).
 
 ### Vega (Metadata Engine + DS + Dataview)
 
@@ -145,7 +195,7 @@ database to avoid polluting existing data.
 | Resource Get | `vega resource get` | `test_vega_resource_get` | pass |
 | Resource List All | `vega resource list-all` | `test_vega_resource_list_all` | known_bug |
 | Discovery Task List | `vega discovery-task list` | `test_vega_discovery_task_list` | known_bug |
-| Discovery Task Get | `vega discovery-task get` | `test_vega_discovery_task_get` | pass |
+| Discovery Task Get | `vega discovery-task get` | `test_vega_discovery_task_get` | known_bug |
 | Dataset Lifecycle | `vega resource create/update-docs/build` | `test_vega_dataset_lifecycle` | wait_for_env |
 | Query Execute | `vega resource query` (cross-resource) | `test_vega_query_execute` | wait_for_env |
 
@@ -170,6 +220,7 @@ database to avoid polluting existing data.
 **Known Bugs:**
 - **connector-type get 404** ([adp#427](https://github.com/kweaver-ai/adp/issues/427)): handler reads `c.Param("id")` but route defines `:type`.
 - **discovery-task list 404** ([adp#428](https://github.com/kweaver-ai/adp/issues/428)): handler requires catalog_id but route has no path param.
+- **discovery-task get** — `discovery-task` subcommand removed from SDK; use `catalog discover --wait` instead.
 - **catalog resources 500** ([adp#447](https://github.com/kweaver-ai/adp/issues/447)): `FilterResources` sends empty resources array to Hydra when catalog has no resources.
 - **resource list-all 404** ([adp#448](https://github.com/kweaver-ai/adp/issues/448)): `ListResources` handler returns 404 instead of 400 when `resource_type` param missing.
 - **ds delete 500**: backend database error when deleting datasource on dip.aishu.cn.
@@ -181,6 +232,33 @@ database to avoid polluting existing data.
 | BKN List (via CL) | `context-loader bkn list` | `test_context_loader_bkn_list` | pass |
 | BKN Export (via CL) | `context-loader bkn export` | `test_context_loader_bkn_export` | pass |
 | OT Query (via CL) | `context-loader object-type query` | `test_context_loader_object_type_query` | pass |
+
+### Dataflow (wait_for_cli)
+
+> **Note:** `dataflow` subcommand is not yet available in the SDK CLI. All tests are written and will auto-activate once the CLI ships.
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Dataflow List | `dataflow list` | `test_dataflow_list` | wait_for_cli |
+| Dataflow Get | `dataflow get` | `test_dataflow_get` | wait_for_cli |
+| Dataflow Get Verbose | `dataflow get --verbose` | `test_dataflow_get_verbose` | wait_for_cli |
+| Dataflow Status | `dataflow status` | `test_dataflow_status` | wait_for_cli |
+| Dataflow Logs | `dataflow logs --limit 10` | `test_dataflow_logs` | wait_for_cli |
+| Dataflow Validate | `dataflow validate` | `test_dataflow_validate` | wait_for_cli |
+| Dataflow Dry Run | `dataflow run --dry-run` | `test_dataflow_dry_run` | wait_for_cli |
+| Preview Source | `dataflow preview --node source` | `test_dataflow_preview_source` | wait_for_cli |
+| Execute Single Node | `dataflow run --node source` | `test_dataflow_execute_single_node` | wait_for_cli |
+| Dataflow History | `dataflow history --limit 10` | `test_dataflow_history` | wait_for_cli |
+| Schema Inference | `dataflow schema` | `test_dataflow_schema_inference` | wait_for_cli |
+| Create & Delete | `dataflow create / delete` | `test_dataflow_create_and_delete` | wait_for_cli (destructive) |
+| Update | `dataflow update` | `test_dataflow_update` | wait_for_cli (destructive) |
+| Full Lifecycle | ds connect -> dataflow create -> validate -> run -> cleanup | `test_dataflow_full_lifecycle` | wait_for_cli (destructive) |
+
+### Token Refresh
+
+| Capability | CLI Command | Test | Status |
+|------------|-------------|------|--------|
+| Auto Token Refresh | `bkn list` + `auth status` | `test_token_auto_refresh` | pass |
 
 ## Project Structure
 
@@ -202,7 +280,7 @@ tests/
 │   ├── bkn/                # BKN: list, export, search, schema, actions, lifecycle
 │   ├── vega/               # Vega: health, catalogs, resources, DS, dataview, lifecycle
 │   ├── context_loader/     # Context Loader / MCP
-│   ├── dataflow/           # Dataflow (pending CLI)
+│   ├── dataflow/           # Dataflow: list, get, validate, run, lifecycle
 │   └── execution_factory/  # Execution Factory (pending CLI)
 test-result/
 ├── runs/<timestamp>/       # Per-run results, logs, reports
@@ -217,12 +295,15 @@ make test-at             # Acceptance tests against live service
 make test-at-full        # AT + agent judge scoring
 make test-smoke          # Minimal health check (smoke markers)
 make test-report         # Full run with aggregate report
+make lint                # Run ruff check + pyright
+make ci                  # Lint + acceptance tests
 
 # Per-module
 make test-agent          # Agent module only
 make test-bkn            # BKN module only
 make test-vega           # Vega module only (includes DS + Dataview)
 make test-context-loader # Context Loader module only
+make test-dataflow       # Dataflow module only
 ```
 
 Lifecycle tests (create/delete resources) require `EVAL_RUN_DESTRUCTIVE=1` and appropriate DB credentials.
@@ -270,6 +351,25 @@ All config keys are declared in `.env.example`. Key groups:
 | Database | `KWEAVER_TEST_DB_HOST/PORT/USER/PASS/NAME/TYPE` | For lifecycle tests |
 | Feature flags | `EVAL_AGENT_JUDGE`, `EVAL_REPORT` | No |
 | API keys | `ANTHROPIC_API_KEY` | When EVAL_AGENT_JUDGE=1 |
+
+## TODO
+
+### P0 — 阻塞测试准确性
+
+- [ ] Vega `discovery-task` 子命令已从 SDK 移除，相关测试需迁移到 `catalog discover --wait`
+- [ ] BKN object-type update known_bug 需单独提 issue（与 adp#445 同源但未归档）
+- [ ] BKN search known_bug 需提 issue 跟踪（markdown-wrapped output）
+
+### P1 — 测试覆盖缺口
+
+- [ ] Vega dataset lifecycle / query execute 依赖环境未就绪（wait_for_env），需跟进环境部署
+- [ ] Execution Factory 测试用例（待 CLI 支持）
+- [ ] `tests/agent/test_full_flow_eval.py` 未纳入任何 make target，需归入测试流程
+
+### P2 — 质量改进
+
+- [ ] Agent context quality 测试依赖 agent judge 评分，考虑补充 deterministic 断言兜底
+- [ ] Dataflow 已有测试但未标记 `smoke`，需补充冒烟标记
 
 ## License
 

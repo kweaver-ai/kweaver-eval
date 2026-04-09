@@ -90,3 +90,42 @@ async def test_agent_crud_lifecycle(
     det = scorer.result()
     await eval_case("agent_crud_lifecycle", steps, det, module="adp/agent")
     assert det.passed, det.failures
+
+
+@pytest.mark.destructive
+async def test_agent_config_update(
+    cli_agent: CliAgent, scorer: Scorer, eval_case, owned_agent: dict,
+):
+    """Update agent system_prompt and verify the change persists."""
+    agent_id = owned_agent["id"]
+    steps = []
+
+    new_prompt = "你是一个专业的数据分析助手。"
+
+    # Step 1: update system prompt
+    update = await cli_agent.run_cli(
+        "agent", "update", agent_id,
+        "--system-prompt", new_prompt,
+    )
+    steps.append(update)
+    scorer.assert_exit_code(update, 0, "system-prompt update")
+
+    # Step 2: verify change persisted
+    after = await cli_agent.run_cli("agent", "get", agent_id, "--verbose")
+    steps.append(after)
+    scorer.assert_exit_code(after, 0, "get after update")
+
+    if isinstance(after.parsed_json, dict):
+        config = after.parsed_json.get("config") or {}
+        if isinstance(config, str):
+            import json
+            config = json.loads(config)
+        if isinstance(config, dict):
+            scorer.assert_true(
+                config.get("system_prompt") == new_prompt,
+                "system_prompt updated in config",
+            )
+
+    det = scorer.result()
+    await eval_case("agent_config_update", steps, det, module="adp/agent")
+    assert det.passed, det.failures

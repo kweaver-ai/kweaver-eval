@@ -30,6 +30,7 @@ async def test_object_type_get(
     assert det.passed, det.failures
 
 
+@pytest.mark.known_bug("bkn-backend UpdateObjectType missing Branch assignment — adp#445 fixed relation-type but object-type handler has identical unfiled bug")
 @pytest.mark.destructive
 async def test_object_type_update_property_cycle(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
