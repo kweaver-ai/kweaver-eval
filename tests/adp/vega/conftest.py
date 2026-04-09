@@ -68,18 +68,23 @@ async def ds_id(cli_agent: CliAgent) -> str:
 
 @pytest.fixture(scope="session")
 async def dataview_id(cli_agent: CliAgent) -> str:
-    """Find the first available dataview ID. Skips if none found."""
-    result = await cli_agent.run_cli("dataview", "list", "--limit", "5")
+    """Find a queryable dataview ID. Probes query to skip orphan dataviews
+    whose underlying datasource has been deleted."""
+    result = await cli_agent.run_cli("dataview", "list", "--limit", "20")
     if result.exit_code != 0:
         pytest.skip("Cannot list dataviews")
     parsed = result.parsed_json
     entries = parsed if isinstance(parsed, list) else (parsed or {}).get("entries") or []
     if not isinstance(entries, list) or len(entries) == 0:
         pytest.skip("No dataviews available")
-    dvid = str(entries[0].get("id") or "")
-    if not dvid:
-        pytest.skip("Cannot determine dataview ID")
-    return dvid
+    for dv in entries:
+        dvid = str(dv.get("id") or "")
+        if not dvid:
+            continue
+        probe = await cli_agent.run_cli("dataview", "query", dvid, "--limit", "1")
+        if probe.exit_code == 0:
+            return dvid
+    pytest.skip("No queryable dataview found (all may be orphans)")
 
 
 @pytest.fixture(scope="session")

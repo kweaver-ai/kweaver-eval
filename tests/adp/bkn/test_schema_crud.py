@@ -37,8 +37,20 @@ async def test_object_type_create_and_delete(
     if not dataview_id:
         pytest.skip("No dataview_id found on existing OT")
 
+    # Pick a real field name from the existing OT's data_properties for primary-key.
+    # SDK 0.5.2+ auto-fills data_properties from dataview fields, so primary_key
+    # must be a field that actually exists in the dataview.
+    data_props = ot_data.get("data_properties") or []
+    pk_name = ""
+    for prop in data_props:
+        name = str(prop.get("name") or "")
+        if name and not name.startswith("_"):
+            pk_name = name
+            break
+    if not pk_name:
+        pytest.skip("No usable data property for primary-key")
+
     ot_name = f"eval_ot_{int(time.time())}_{_short_suffix()}"
-    pk_name = "eval_pk"
 
     try:
         # Step 1: create
