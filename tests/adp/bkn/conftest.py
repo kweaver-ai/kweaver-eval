@@ -246,19 +246,25 @@ async def kn_with_data(cli_agent: CliAgent, db_credentials: dict):
 
     Prefers KNs with >=2 OTs sharing common properties, so downstream tests
     (relation-type update, object-type properties) can run without skipping.
+    Retries discovery up to 3 times to handle transient TLS failures.
     """
-    # Fast path: find existing KN with rich data
-    rich = await _find_kn_with_rich_data(cli_agent)
-    if rich:
-        kn_id, ot_id, _ = rich
-        yield kn_id, ot_id
-        return
+    import asyncio as _aio
 
-    # Fallback: find any KN with at least one queryable OT
-    found = await _find_kn_with_object_types(cli_agent)
-    if found:
-        yield found
-        return
+    for _attempt in range(3):
+        # Fast path: find existing KN with rich data
+        rich = await _find_kn_with_rich_data(cli_agent)
+        if rich:
+            kn_id, ot_id, _ = rich
+            yield kn_id, ot_id
+            return
+
+        # Fallback: find any KN with at least one queryable OT
+        found = await _find_kn_with_object_types(cli_agent)
+        if found:
+            yield found
+            return
+
+        await _aio.sleep(3)
 
     # Slow path: create from DB (newly created KN won't have OT data without build)
     result = await _create_kn_from_db(cli_agent, db_credentials)

@@ -119,31 +119,39 @@ async def chat_agent_id(cli_agent: CliAgent) -> str:
     """Find an existing published agent that can actually respond to chat.
 
     Iterates through agents and does a quick probe chat to verify.
+    Retries the whole discovery up to 3 times to handle transient TLS failures.
     """
-    result = await cli_agent.run_cli("agent", "list", "--limit", "30", "--verbose")
-    parsed = result.parsed_json
-    if result.exit_code != 0 or parsed is None:
-        pytest.skip("Cannot list agents")
-    entries = parsed if isinstance(parsed, list) else parsed.get("entries") or parsed.get("data") or []
-    if not isinstance(entries, list) or len(entries) == 0:
-        pytest.skip("No agents available for chat testing")
+    import asyncio as _aio
 
-    # Prefer non-built-in agents first, then built-in
-    candidates = []
-    for a in entries:
-        if isinstance(a, dict):
-            aid = str(a.get("id") or a.get("agent_id") or "")
-            if aid:
-                candidates.append((aid, a.get("is_built_in", 0)))
-    candidates.sort(key=lambda x: x[1])  # non-built-in first
+    for _attempt in range(3):
+        result = await cli_agent.run_cli("agent", "list", "--limit", "30", "--verbose")
+        parsed = result.parsed_json
+        if result.exit_code != 0 or parsed is None:
+            await _aio.sleep(3)
+            continue
+        entries = parsed if isinstance(parsed, list) else parsed.get("entries") or parsed.get("data") or []
+        if not isinstance(entries, list) or len(entries) == 0:
+            await _aio.sleep(3)
+            continue
 
-    for aid, _ in candidates:
-        probe = await cli_agent.run_cli(
-            "agent", "chat", aid, "-m", "hi", "--no-stream",
-            timeout=30.0,
-        )
-        if probe.exit_code == 0 and len(probe.stdout.strip()) > 0:
-            return aid
+        # Prefer non-built-in agents first, then built-in
+        candidates = []
+        for a in entries:
+            if isinstance(a, dict):
+                aid = str(a.get("id") or a.get("agent_id") or "")
+                if aid:
+                    candidates.append((aid, a.get("is_built_in", 0)))
+        candidates.sort(key=lambda x: x[1])  # non-built-in first
+
+        for aid, _ in candidates:
+            probe = await cli_agent.run_cli(
+                "agent", "chat", aid, "-m", "hi", "--no-stream",
+                timeout=45.0,
+            )
+            if probe.exit_code == 0 and len(probe.stdout.strip()) > 0:
+                return aid
+
+        await _aio.sleep(3)
 
     pytest.skip("No agents available that can respond to chat")
 
