@@ -130,6 +130,20 @@ async def test_bkn_action_execute_and_log(
     scorer.assert_json(execute, "action execute returns JSON")
     execute_ok = execute.exit_code == 0 and isinstance(execute.parsed_json, dict)
 
+    # Verify execute response has meaningful content
+    if execute_ok:
+        exec_data = execute.parsed_json
+        # Check for execution status or result fields
+        has_status = bool(
+            exec_data.get("status")
+            or exec_data.get("execution_id")
+            or exec_data.get("id")
+        )
+        scorer.assert_true(
+            has_status,
+            "action execute response contains status or execution ID",
+        )
+
     # Step 2: get execution ID if execute succeeded
     exec_id = ""
     if execute_ok and isinstance(execute.parsed_json, dict):
@@ -147,6 +161,13 @@ async def test_bkn_action_execute_and_log(
         steps.append(exec_get)
         scorer.assert_exit_code(exec_get, 0, "action-execution get")
         scorer.assert_json(exec_get, "action-execution get returns JSON")
+        # Verify execution record has meaningful status
+        if isinstance(exec_get.parsed_json, dict):
+            exec_status = str(exec_get.parsed_json.get("status") or "")
+            scorer.assert_true(
+                bool(exec_status),
+                f"action-execution get has status field (got: '{exec_status}')",
+            )
 
     # Step 4: action-log list
     log_list = await cli_agent.run_cli(
@@ -175,6 +196,16 @@ async def test_bkn_action_execute_and_log(
             scorer.assert_json(
                 log_get, "action-log get returns JSON",
             )
+            # Verify log entry has meaningful fields
+            if isinstance(log_get.parsed_json, dict):
+                log_data = log_get.parsed_json
+                if "entries" in log_data and isinstance(log_data["entries"], list) and log_data["entries"]:
+                    log_data = log_data["entries"][0]
+                log_status = str(log_data.get("status") or "")
+                scorer.assert_true(
+                    bool(log_status),
+                    f"action-log get has status field (got: '{log_status}')",
+                )
 
     det = scorer.result()
     await eval_case(
