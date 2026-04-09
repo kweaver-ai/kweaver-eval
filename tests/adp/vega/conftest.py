@@ -14,56 +14,72 @@ from lib.agents.cli_agent import CliAgent
 
 @pytest.fixture(scope="session")
 async def catalog_id(cli_agent: CliAgent) -> str:
-    """Find the first available Vega catalog ID. Skips if none found."""
-    result = await cli_agent.run_cli("vega", "catalog", "list")
+    """Find a reachable Vega catalog ID. Probes each catalog to skip orphans
+    whose underlying connector has been deleted."""
+    result = await cli_agent.run_cli("vega", "catalog", "list", "--limit", "20")
     if result.exit_code != 0:
         pytest.skip("Cannot list Vega catalogs")
     catalogs = result.parsed_json
+    if isinstance(catalogs, dict):
+        catalogs = catalogs.get("items") or catalogs.get("entries") or []
     if not isinstance(catalogs, list) or len(catalogs) == 0:
-        if isinstance(catalogs, dict):
-            catalogs = catalogs.get("items") or catalogs.get("entries") or []
-        if not catalogs:
-            pytest.skip("No Vega catalogs available")
-    cat = catalogs[0] if isinstance(catalogs, list) else catalogs
-    cat_id = str(cat.get("id") or cat.get("catalog_id") or "")
-    if not cat_id:
-        pytest.skip("Cannot determine catalog ID")
-    return cat_id
+        pytest.skip("No Vega catalogs available")
+    for cat in catalogs:
+        cat_id = str(cat.get("id") or cat.get("catalog_id") or "")
+        if not cat_id:
+            continue
+        probe = await cli_agent.run_cli("vega", "catalog", "get", cat_id)
+        if probe.exit_code == 0:
+            return cat_id
+    pytest.skip("No reachable Vega catalog found (all may be orphans)")
 
 
 @pytest.fixture(scope="session")
 async def resource_id(cli_agent: CliAgent) -> str:
-    """Find the first available Vega resource ID. Skips if none found."""
-    result = await cli_agent.run_cli("vega", "resource", "list")
+    """Find a reachable Vega resource ID. Probes each resource to skip orphans
+    whose underlying catalog or connector has been deleted."""
+    result = await cli_agent.run_cli("vega", "resource", "list", "--limit", "20")
     if result.exit_code != 0:
         pytest.skip("Cannot list Vega resources")
     resources = result.parsed_json
+    if isinstance(resources, dict):
+        resources = resources.get("items") or resources.get("entries") or []
     if not isinstance(resources, list) or len(resources) == 0:
-        if isinstance(resources, dict):
-            resources = resources.get("items") or resources.get("entries") or []
-        if not resources:
-            pytest.skip("No Vega resources available")
-    res = resources[0] if isinstance(resources, list) else resources
-    res_id = str(res.get("id") or res.get("resource_id") or "")
-    if not res_id:
-        pytest.skip("Cannot determine resource ID")
-    return res_id
+        pytest.skip("No Vega resources available")
+    for res in resources:
+        res_id = str(res.get("id") or res.get("resource_id") or "")
+        if not res_id:
+            continue
+        probe = await cli_agent.run_cli("vega", "resource", "get", res_id)
+        if probe.exit_code == 0:
+            return res_id
+    pytest.skip("No reachable Vega resource found (all may be orphans)")
 
 
 @pytest.fixture(scope="session")
 async def ds_id(cli_agent: CliAgent) -> str:
-    """Find the first available datasource ID. Skips if none found."""
-    result = await cli_agent.run_cli("ds", "list")
-    if result.exit_code != 0 or not isinstance(result.parsed_json, dict):
+    """Find a reachable datasource ID. Probes each datasource to skip orphans
+    that have been deleted or are otherwise unreachable."""
+    result = await cli_agent.run_cli("ds", "list", "--limit", "20")
+    if result.exit_code != 0:
         pytest.skip("Cannot list datasources")
-    entries = result.parsed_json.get("entries", [])
+    parsed = result.parsed_json
+    if isinstance(parsed, dict):
+        entries = parsed.get("entries") or parsed.get("items") or []
+    elif isinstance(parsed, list):
+        entries = parsed
+    else:
+        entries = []
     if not isinstance(entries, list) or len(entries) == 0:
         pytest.skip("No datasources available")
-    ds = entries[0]
-    did = str(ds.get("id") or ds.get("ds_id") or ds.get("datasource_id", ""))
-    if not did:
-        pytest.skip("Cannot determine datasource ID")
-    return did
+    for ds in entries:
+        did = str(ds.get("id") or ds.get("ds_id") or ds.get("datasource_id") or "")
+        if not did:
+            continue
+        probe = await cli_agent.run_cli("ds", "get", did)
+        if probe.exit_code == 0:
+            return did
+    pytest.skip("No reachable datasource found (all may be orphans)")
 
 
 @pytest.fixture(scope="session")
