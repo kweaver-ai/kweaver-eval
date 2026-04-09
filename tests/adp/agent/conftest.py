@@ -370,8 +370,14 @@ async def owned_agent_with_kn(
     Fast path: discover existing KN. Slow path: create from DB.
     db_credentials is only requested when the fast path fails.
     """
-    # Step 1: discover or create KN
-    found = await _find_kn_with_queryable_ot(cli_agent)
+    # Step 1: discover or create KN (retry on transient TLS failures)
+    import asyncio as _aio
+    found = None
+    for _attempt in range(3):
+        found = await _find_kn_with_queryable_ot(cli_agent)
+        if found:
+            break
+        await _aio.sleep(3)
     if not found:
         # Slow path — need DB credentials to create a KN
         db_credentials = request.getfixturevalue("db_credentials")

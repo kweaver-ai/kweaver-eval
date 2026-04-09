@@ -47,9 +47,34 @@ async def _query_ground_truth(
 ) -> tuple[str, list[str]]:
     """Query KN for ground truth data. Returns (ot_name, [field_value, ...]).
 
-    Fetches first instance from the OT and extracts non-empty string values
-    suitable for checking in agent replies.
+    Fetches instances from the OT and extracts non-empty string values
+    suitable for checking in agent replies. If the primary OT yields no
+    usable values, tries other OTs in the same KN.
     """
+    ot_ids_to_try = [ot_id]
+
+    # Collect alternative OTs from the same KN in case primary is data-poor.
+    ot_list_r = await cli_agent.run_cli("bkn", "object-type", "list", kn_id)
+    ot_entries = ot_list_r.parsed_json
+    if isinstance(ot_entries, dict):
+        ot_entries = ot_entries.get("entries") or []
+    if isinstance(ot_entries, list):
+        for ot in ot_entries:
+            alt_id = str(ot.get("id") or ot.get("ot_id") or "")
+            if alt_id and alt_id != ot_id:
+                ot_ids_to_try.append(alt_id)
+
+    for try_ot_id in ot_ids_to_try[:5]:
+        ot_name, values = await _query_single_ot(cli_agent, kn_id, try_ot_id)
+        if values:
+            return ot_name, values
+    return ot_id, []
+
+
+async def _query_single_ot(
+    cli_agent: CliAgent, kn_id: str, ot_id: str,
+) -> tuple[str, list[str]]:
+    """Query a single OT for ground truth values."""
     # Get OT metadata for name
     ot_get = await cli_agent.run_cli("bkn", "object-type", "get", kn_id, ot_id)
     ot_name = ""
@@ -58,25 +83,42 @@ async def _query_ground_truth(
         if "entries" in entry and isinstance(entry["entries"], list) and entry["entries"]:
             entry = entry["entries"][0]
         ot_name = str(entry.get("name") or entry.get("ot_name") or "")
+    if not ot_name:
+        ot_name = ot_id
 
     # Query instances
     result = await cli_agent.run_cli(
-        "bkn", "object-type", "query", kn_id, ot_id, "--limit", "3",
+        "bkn", "object-type", "query", kn_id, ot_id, "--limit", "5",
     )
+    # Internal / low-value fields to skip.
+    _SKIP_KEYS = {"_score", "_instance_id", "_instance_identity", "_display",
+                  "search_after", "overall_ms", "search_from_index",
+                  "id", "entry_id"}
+    _SKIP_VALUES = {"None", "null", "True", "False", "none", ""}
+
     values = []
     if result.exit_code == 0 and isinstance(result.parsed_json, (list, dict)):
         rows = result.parsed_json
         if isinstance(rows, dict):
-            rows = rows.get("entries") or rows.get("data") or rows.get("items") or []
+            rows = (rows.get("datas") or rows.get("entries")
+                    or rows.get("data") or rows.get("items") or [])
         if isinstance(rows, list):
-            for row in rows[:3]:
-                if isinstance(row, dict):
-                    for v in row.values():
-                        sv = str(v).strip()
-                        if sv and len(sv) >= 2 and sv not in ("None", "null", "True", "False"):
-                            values.append(sv)
-                            if len(values) >= 3:
-                                break
+            for row in rows[:5]:
+                if not isinstance(row, dict):
+                    continue
+                for k, v in row.items():
+                    if k.startswith("_") or k in _SKIP_KEYS:
+                        continue
+                    sv = str(v).strip()
+                    if sv in _SKIP_VALUES or v is None:
+                        continue
+                    # Skip pure-numeric IDs (low distinctiveness in replies)
+                    if sv.isdigit() and len(sv) > 10:
+                        continue
+                    if len(sv) >= 2:
+                        values.append(sv)
+                        if len(values) >= 3:
+                            break
                 if len(values) >= 3:
                     break
     return ot_name, values
