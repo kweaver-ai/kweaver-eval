@@ -1,6 +1,6 @@
 providers:
   default:
-    type: pi
+    type: claude_code
 
 models:
   opus:
