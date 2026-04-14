@@ -12,9 +12,7 @@ stages:
 
   - name: coverage-audit
     roles: [auditor]
-    overrides:
-      auditor:
-        model: opus
+    timeout: 1800000
 
   - repeat:
       name: supplement-loop

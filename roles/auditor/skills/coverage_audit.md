@@ -7,44 +7,38 @@ capabilities against existing test cases.
 
 Coverage is measured by **module capability**, not CLI command tree:
 
-| Module | CLI Domains | Backend Source |
-|--------|-------------|----------------|
-| Decision Agent | `agent` | `~/dev/github/kweaver/decision-agent/` |
-| BKN | `bkn` | `~/dev/github/kweaver/adp/` (knowledge network handlers) |
-| Vega | `vega` + `ds` + `dataview` | `~/dev/github/kweaver/adp/` (vega/metadata handlers) |
-| Context Loader | `context-loader` | `~/dev/github/kweaver/adp/` (context-loader handlers) |
-| Execution Factory | `skill` | `~/dev/github/kweaver/adp/` (execution-factory handlers) |
-| Dataflow | `dataflow` | `~/dev/github/kweaver/adp/` (dataflow handlers) |
-| TraceAI | (no CLI yet) | `~/dev/github/kweaver/trace-ai/` |
+| Module | CLI Domains |
+|--------|-------------|
+| Decision Agent | `agent` |
+| BKN | `bkn` |
+| Vega | `vega` + `ds` + `dataview` |
+| Context Loader | `context-loader` |
+| Execution Factory | `skill` |
+| Dataflow | `dataflow` |
+| TraceAI | (no CLI yet) |
 
 **Important:** `dataview` is part of Vega, `skill` is part of Execution Factory.
 These are CLI organization quirks, not module boundaries.
 
-## Step 1: Extract backend capabilities
+## Step 1: Extract capabilities
 
-For each module, read the backend source code to identify exposed API endpoints
-and capabilities. Look for:
-- HTTP handler registrations (route definitions)
-- gRPC service definitions
-- Public API methods
+Build a capability inventory for each module. You decide the best sources — options include:
+- `kweaver --help` and `kweaver <domain> --help` for CLI-exposed capabilities
+- SDK CLI source at `~/dev/github/kweaver-sdk/` for detailed command definitions
+- Backend source at `~/dev/github/kweaver/` for API-level capabilities (especially modules without CLI like TraceAI)
+- The existing README coverage tables in `~/dev/github/kweaver-eval/README.md`
+
+Be strategic — don't read entire codebases. Start with CLI help and README, then
+drill into source only where gaps are unclear.
 
 Record each capability as a short identifier, e.g., `agent.list`, `agent.chat.stream`,
 `bkn.object_type.create`, `vega.catalog.discover`.
 
-## Step 2: Check SDK CLI support
+For each capability, note whether CLI support exists (`cli_available` / `cli_missing`).
 
-For each backend capability, check if the SDK CLI exposes it:
+## Step 2: Scan existing test cases
 
-1. Run `kweaver --help` and `kweaver <domain> --help` for each domain
-2. Read SDK CLI source at `~/dev/github/kweaver-sdk/src/kweaver/cli/` for
-   detailed command definitions
-3. Mark each capability as:
-   - `cli_available` — CLI command exists
-   - `cli_missing` — no CLI command (test must wait or use `kweaver call`)
-
-## Step 3: Scan existing test cases
-
-Read all test files under `~/dev/github/kweaver-eval/tests/`:
+Read test files under `~/dev/github/kweaver-eval/tests/`:
 
 1. Map each test function to a module capability
 2. Check markers to determine status:
@@ -53,23 +47,23 @@ Read all test files under `~/dev/github/kweaver-eval/tests/`:
    - `@pytest.mark.wait_for_env(...)` → `covered_wait_env`
    - `@pytest.mark.wait_for_cli(...)` → `covered_wait_cli` (re-check if CLI now available)
 
-## Step 4: Incremental awareness
+## Step 3: Incremental awareness
 
 For tests marked `wait_for_cli`:
-- If SDK CLI now supports the command (found in Step 2) → move to `gaps_core`
+- If SDK CLI now supports the command (found in Step 1) → move to `gaps_core`
   (the skip should be removed and the test re-verified)
 
 For tests marked `wait_for_env`:
 - If the env_checker stage passed all checks → consider moving to `gaps_core`
 
-## Step 5: Compute gaps
+## Step 4: Compute gaps
 
 For each module:
 - `covered` = capabilities with passing tests
 - `gaps_core` = capabilities with no test OR with stale wait_for_* markers, that represent core CRUD/lifecycle/read flows
 - `gaps_corner` = missing corner cases for covered capabilities (error paths, edge cases, concurrency, boundary values)
 
-## Step 6: Write gate artifact
+## Step 5: Write gate artifact
 
 Write `{stage}/{role}/coverage-gap.json`:
 
