@@ -1,5 +1,10 @@
 name: test-supplement
 description: Automated test case gap analysis and supplement for kweaver-eval
+goal: >
+  Analyze test coverage gaps across all KWeaver modules (Decision Agent, BKN,
+  Vega, Context Loader, Execution Factory, Dataflow, TraceAI) by comparing
+  backend capabilities against existing test cases. Supplement missing tests
+  for core flows and corner cases, triage failures, and produce a summary report.
 
 stages:
   - name: env-check
