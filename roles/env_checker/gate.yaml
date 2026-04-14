@@ -1,0 +1,7 @@
+id: env-ready
+description: All environment prerequisites must be satisfied
+evidence:
+  path: "{stage}/{role}/result.json"
+  check:
+    field: ready
+    equals: true

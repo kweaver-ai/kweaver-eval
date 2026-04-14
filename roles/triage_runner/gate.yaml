@@ -1,0 +1,7 @@
+id: coverage-sufficient
+description: All actionable coverage gaps must be addressed
+evidence:
+  path: "{stage}/{role}/result.json"
+  check:
+    field: has_remaining_gaps
+    equals: false

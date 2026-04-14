@@ -1,0 +1,7 @@
+id: tests-collected
+description: New test cases must be written and collectible by pytest
+evidence:
+  path: "{stage}/{role}/result.json"
+  check:
+    field: new_tests_count
+    gte: 1

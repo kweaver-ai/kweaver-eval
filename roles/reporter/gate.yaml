@@ -1,0 +1,7 @@
+id: report-done
+description: Summary report must be produced
+evidence:
+  path: "{stage}/{role}/result.json"
+  check:
+    field: completed
+    equals: true

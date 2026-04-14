@@ -1,0 +1,7 @@
+id: audit-complete
+description: Coverage gap report must be produced with valid capability inventory
+evidence:
+  path: "{stage}/{role}/coverage-gap.json"
+  check:
+    field: summary.total_capabilities
+    gte: 1

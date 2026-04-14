@@ -9,3 +9,6 @@ build/
 !.env.example
 test-result/
 .venv/
+
+# Petri runtime artifacts
+.petri/

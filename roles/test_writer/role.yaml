@@ -1,0 +1,5 @@
+persona: soul.md
+skills:
+  - petri:shell_tools
+  - petri:file_operations
+  - write_tests

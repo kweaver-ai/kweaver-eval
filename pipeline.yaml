@@ -1,0 +1,27 @@
+name: test-supplement
+description: Automated test case gap analysis and supplement for kweaver-eval
+
+stages:
+  - name: env-check
+    roles: [env_checker]
+
+  - name: coverage-audit
+    roles: [auditor]
+    overrides:
+      auditor:
+        model: opus
+
+  - repeat:
+      name: supplement-loop
+      max_iterations: 5
+      until: coverage-sufficient
+      stages:
+        - name: write-tests
+          roles: [test_writer]
+          max_retries: 2
+        - name: run-and-triage
+          roles: [triage_runner]
+          max_retries: 1
+
+  - name: report
+    roles: [reporter]
