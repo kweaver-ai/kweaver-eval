@@ -49,10 +49,18 @@ List capabilities that remain uncovered and why (blocked by CLI, blocked by env,
 
 Actionable next steps: bugs to file, env to provision, CLI features to request.
 
-## Also update README
+## CRITICAL CONSTRAINT
 
-If the report shows significant coverage changes, update the "Test Coverage Summary"
-table in `~/dev/github/kweaver-eval/README.md` to reflect the new state.
+Your job is **producing the report only**.
+
+**DO NOT:**
+- Modify README.md, test files, or any project files
+- Run tests
+- Write code
+
+**ONLY produce:**
+- `{stage}/{role}/supplement-report.md`
+- `{stage}/{role}/result.json`
 
 ## Gate artifact
 

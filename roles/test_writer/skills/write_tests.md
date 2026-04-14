@@ -2,6 +2,21 @@
 
 Supplement missing test cases for kweaver-eval based on the coverage gap report.
 
+## CRITICAL CONSTRAINT
+
+Your job is **writing test code only**.
+
+**DO NOT:**
+- Run the actual test suite (`pytest -m api` or `make test-at`)
+- Add skip markers like `known_bug`, `wait_for_env`, `wait_for_cli` to tests — that's triage's job
+- Modify lib/ code, pyproject.toml, or any non-test files
+- Classify or diagnose failures
+
+**ONLY:**
+- Write new test files under `tests/adp/`
+- Verify collection with `pytest --collect-only`
+- Write the gate artifact
+
 ## Working directory
 
 All test files live in `~/dev/github/kweaver-eval/`. Always work in this directory.

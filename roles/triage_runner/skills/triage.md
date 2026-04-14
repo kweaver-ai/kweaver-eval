@@ -3,6 +3,22 @@
 Run newly written tests, classify failures, and determine whether more test
 writing is needed.
 
+## CRITICAL CONSTRAINT
+
+Your job is **running tests and classifying failures only**.
+
+**DO NOT:**
+- Write new test files or new test functions
+- Modify test logic or assertions
+- Modify lib/ code, pyproject.toml, or any non-test files
+- Read entire codebases to investigate — only read specific files when needed to classify a failure
+
+**ONLY:**
+- Run existing tests
+- Add skip markers (`known_bug`, `wait_for_env`, `wait_for_cli`) to failing tests
+- Update the coverage gap tracking
+- Write the gate artifact
+
 ## Working directory
 
 `~/dev/github/kweaver-eval/`
