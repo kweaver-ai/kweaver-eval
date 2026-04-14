@@ -1,19 +1,16 @@
 """Dataflow module conftest — fixtures for data pipeline tests.
 
 Dataflow depends on ds (datasource) and optionally bkn (knowledge network).
-CLI commands (pending):
+Implemented CLI commands:
     kweaver dataflow list          — list dataflows
-    kweaver dataflow get <id>      — get dataflow details
-    kweaver dataflow create ...    — create a dataflow
-    kweaver dataflow delete <id>   — delete a dataflow
-    kweaver dataflow run <id>      — execute a dataflow
-    kweaver dataflow status <id>   — check run status
-    kweaver dataflow logs <id>     — get execution logs
+    kweaver dataflow run <id>      — execute a dataflow (--file or --url)
+    kweaver dataflow runs <id>     — list run history
+    kweaver dataflow logs <id> <instanceId> — get execution logs
 
 Fixture strategy:
     - Read tests: discover existing resources via `dataflow list` (skip if none)
-    - Lifecycle tests: require EVAL_RUN_DESTRUCTIVE=1 + db_credentials
-    - Query/Execute tests: require a runnable dataflow or create one
+    - Query/Execute tests: require a runnable dataflow (will be added when CLI supports)
+    - Lifecycle tests: require EVAL_RUN_DESTRUCTIVE=1 + db_credentials (will be added when CLI supports)
 """
 
 from __future__ import annotations
@@ -27,7 +24,20 @@ pytestmark = [pytest.mark.dataflow]
 
 @pytest.fixture(scope="session")
 async def df_id(cli_agent: CliAgent) -> str:
-    """Find the first available dataflow ID. Skips if none found or CLI not ready."""
+    """Find the first available dataflow ID. Skips if none found or CLI not ready.
+    
+    In no-auth mode, returns a placeholder ID for CLI validation tests.
+    In authenticated mode, returns a real dataflow ID from the API.
+    """
+    import os
+    is_no_auth = os.environ.get("KWEAVER_TOKEN") == "__NO_AUTH__"
+    
+    if is_no_auth:
+        # No-auth mode: return a placeholder ID for CLI validation
+        # This allows tests to run and validate CLI command structure
+        return "placeholder_df_id_for_no_auth_testing"
+    
+    # Authenticated mode: fetch real dataflow ID
     result = await cli_agent.run_cli("dataflow", "list")
     if result.exit_code != 0:
         if "command not found" in result.stderr.lower() or "unknown" in result.stderr.lower():
@@ -47,6 +57,7 @@ async def df_with_source(cli_agent: CliAgent) -> dict:
     """Find a dataflow with a configured source (ds/catalog). Returns minimal info dict.
 
     Skips if no such dataflow exists.
+    Note: This fixture is reserved for future query/execute tests.
     """
     result = await cli_agent.run_cli("dataflow", "list")
     if result.exit_code != 0 or not isinstance(result.parsed_json, list):

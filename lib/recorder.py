@@ -21,11 +21,19 @@ class Recorder:
         (self._run_dir / "logs").mkdir(exist_ok=True)
         self._results: list[dict] = []
 
-        # Update latest symlink
+        # Update latest symlink (skip on Windows if no admin rights)
         latest = self._base / "runs" / "latest"
-        if latest.is_symlink() or latest.exists():
-            latest.unlink()
-        latest.symlink_to(self._run_dir.name)
+        try:
+            if latest.is_symlink() or latest.exists():
+                latest.unlink()
+            latest.symlink_to(self._run_dir.name)
+        except OSError:
+            # Windows: symlink requires admin rights, skip silently
+            import sys
+            if sys.platform == "win32":
+                pass  # Skip symlink on Windows without admin rights
+            else:
+                raise
 
     @property
     def run_dir(self) -> Path:
