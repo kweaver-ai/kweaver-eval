@@ -233,26 +233,31 @@ database to avoid polluting existing data.
 | BKN Export (via CL) | `context-loader bkn export` | `test_context_loader_bkn_export` | pass |
 | OT Query (via CL) | `context-loader object-type query` | `test_context_loader_object_type_query` | pass |
 
-### Dataflow (wait_for_cli)
+### Dataflow
 
-> **Note:** `dataflow` subcommand is not yet available in the SDK CLI. All tests are written and will auto-activate once the CLI ships.
+> **Note:** Dataflow CLI is implemented in the TypeScript SDK with **4 core commands**.
+> See [`packages/typescript/src/commands/dataflow.ts`](../kweaver-sdk/packages/typescript/src/commands/dataflow.ts).
+>
+> **Implemented commands:**
+> - `kweaver dataflow list` — List all dataflows
+> - `kweaver dataflow run <dagId> --file <path> | --url <url> --name <filename>` — Trigger execution
+> - `kweaver dataflow runs <dagId> [--since <date>]` — List run history
+> - `kweaver dataflow logs <dagId> <instanceId> [--detail]` — Show execution logs
+>
+> **To activate tests**, ensure the TypeScript CLI is installed:
+> ```bash
+> cd kweaver-sdk/packages/typescript
+> npm install && npx tsc -p tsconfig.json && npm link
+> ```
 
 | Capability | CLI Command | Test | Status |
 |------------|-------------|------|--------|
-| Dataflow List | `dataflow list` | `test_dataflow_list` | wait_for_cli |
-| Dataflow Get | `dataflow get` | `test_dataflow_get` | wait_for_cli |
-| Dataflow Get Verbose | `dataflow get --verbose` | `test_dataflow_get_verbose` | wait_for_cli |
-| Dataflow Status | `dataflow status` | `test_dataflow_status` | wait_for_cli |
-| Dataflow Logs | `dataflow logs --limit 10` | `test_dataflow_logs` | wait_for_cli |
-| Dataflow Validate | `dataflow validate` | `test_dataflow_validate` | wait_for_cli |
-| Dataflow Dry Run | `dataflow run --dry-run` | `test_dataflow_dry_run` | wait_for_cli |
-| Preview Source | `dataflow preview --node source` | `test_dataflow_preview_source` | wait_for_cli |
-| Execute Single Node | `dataflow run --node source` | `test_dataflow_execute_single_node` | wait_for_cli |
-| Dataflow History | `dataflow history --limit 10` | `test_dataflow_history` | wait_for_cli |
-| Schema Inference | `dataflow schema` | `test_dataflow_schema_inference` | wait_for_cli |
-| Create & Delete | `dataflow create / delete` | `test_dataflow_create_and_delete` | wait_for_cli (destructive) |
-| Update | `dataflow update` | `test_dataflow_update` | wait_for_cli (destructive) |
-| Full Lifecycle | ds connect -> dataflow create -> validate -> run -> cleanup | `test_dataflow_full_lifecycle` | wait_for_cli (destructive) |
+| Dataflow List | `dataflow list` | `test_dataflow_list` | ✅ Implemented |
+| Dataflow Run (local file) | `dataflow run <dagId> --file <path>` | `test_dataflow_run_with_url` | ✅ Implemented |
+| Dataflow Run (remote URL) | `dataflow run <dagId> --url <url> --name <name>` | `test_dataflow_run_with_url` | ✅ Implemented |
+| Dataflow Runs History | `dataflow runs <dagId> [--since <date>]` | `test_dataflow_runs` | ✅ Implemented |
+| Dataflow Logs | `dataflow logs <dagId> <instanceId> [--detail]` | `test_dataflow_logs` | ✅ Implemented |
+
 
 ### Token Refresh
 

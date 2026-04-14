@@ -74,6 +74,11 @@ def base_url() -> str:
 
 @pytest.fixture(scope="session")
 def cli_agent() -> CliAgent:
+    """Create CLI agent with platform-appropriate command."""
+    import sys
+    # On Windows, use kweaver.cmd if available, otherwise fall back to kweaver
+    if sys.platform == "win32":
+        return CliAgent(cli_binary="kweaver.cmd")
     return CliAgent()
 
 
