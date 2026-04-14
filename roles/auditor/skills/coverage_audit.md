@@ -3,6 +3,22 @@
 Analyze test coverage gaps across all KWeaver modules by comparing backend
 capabilities against existing test cases.
 
+## CRITICAL CONSTRAINT
+
+Your job is **analysis only**. You produce two output files and nothing else.
+
+**DO NOT:**
+- Write, modify, or create any test files
+- Modify any source code
+- Change pyproject.toml, conftest.py, or any existing project files
+- Install packages or modify dependencies
+
+**ONLY produce:**
+- `{stage}/{role}/coverage-gap.json`
+- `{stage}/{role}/coverage-report.md`
+
+Test writing is handled by a separate role (test_writer) in the next stage.
+
 ## Module Mapping
 
 Coverage is measured by **module capability**, not CLI command tree:
