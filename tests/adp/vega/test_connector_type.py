@@ -18,7 +18,6 @@ async def test_vega_connector_type_list(cli_agent: CliAgent, scorer: Scorer, eva
     assert det.passed, det.failures
 
 
-@pytest.mark.known_bug("https://github.com/kweaver-ai/adp/issues/427")
 async def test_vega_connector_type_get(cli_agent: CliAgent, scorer: Scorer, eval_case):
     """vega connector-type get returns details for a specific type.
 

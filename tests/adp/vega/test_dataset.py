@@ -16,7 +16,6 @@ from lib.scorer import Scorer
 
 
 @pytest.mark.destructive
-@pytest.mark.wait_for_env("Dataset update-docs/build not yet functional on dip-poc")
 async def test_vega_dataset_lifecycle(
     cli_agent: CliAgent,
     scorer: Scorer,

@@ -57,8 +57,36 @@ resolve in priority order: `shell env` > `~/.env.secrets` > `.env`.
 | `~/.kweaver/` | CLI auth tokens (auto-managed by `kweaver auth login`) | No |
 
 BKN and Vega lifecycle tests share the same `db_credentials` fixture
-(`tests/adp/conftest.py`). Vega uses a dedicated `kweaver_eval_test`
-database to avoid polluting existing data.
+(`tests/adp/conftest.py`).
+
+### Database Configuration
+
+Lifecycle tests (BKN full lifecycle, Vega catalog create/discover/delete,
+DS connect/delete) require a MySQL database that **the kweaver backend
+can reach**. This is the most common misconfiguration — the DB must be
+accessible from the machine running `KWEAVER_BASE_URL`, not from your
+local machine.
+
+```
+~/.env.secrets:
+  KWEAVER_TEST_DB_HOST=<ip reachable from kweaver backend>
+  KWEAVER_TEST_DB_PORT=3306
+  KWEAVER_TEST_DB_USER=root
+  KWEAVER_TEST_DB_PASS=<password>
+  KWEAVER_TEST_DB_NAME=kweaver_eval_test
+  KWEAVER_TEST_DB_TYPE=mysql
+```
+
+**Requirements:**
+
+| Item | Detail |
+|------|--------|
+| Network | DB host must be reachable from the kweaver backend (`KWEAVER_BASE_URL`), not just from your local machine. If `vega catalog create` returns HTTP 504, the backend cannot reach the DB. |
+| Database | An empty database is sufficient. Lifecycle tests create and clean up their own data. Use a dedicated database (e.g. `kweaver_eval_test`) to avoid polluting production data. |
+| Permissions | The DB user needs CREATE, DROP, SELECT, INSERT, DELETE on the target database. |
+| Affected tests | `test_vega_catalog_lifecycle`, `test_vega_dataset_lifecycle`, `test_datasource_connect_and_delete`, `test_datasource_tables`, `test_bkn_full_lifecycle`, and any test using the `db_credentials` or `vega_connector_config` fixture. |
+
+**How to verify:** Run `kweaver vega catalog create --name test --connector-type mysql --connector-config '{"host":"<DB_HOST>","port":3306,"username":"<USER>","password":"<PASS>","databases":["<DB_NAME>"]}'`. If it returns JSON with an ID, the backend can reach the DB. If it returns 504 Gateway Timeout, the backend cannot.
 
 ## Test Coverage Summary
 

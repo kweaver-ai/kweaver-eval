@@ -37,18 +37,18 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.fixture(scope="session", autouse=True)
 async def ensure_authenticated(cli_agent: CliAgent):
     """Verify CLI is authenticated before running any ADP tests.
-    
+
     Supports no-auth mode via KWEAVER_TOKEN=__NO_AUTH__ environment variable.
     When no-auth mode is enabled, skip authentication check.
     """
     import os
-    
+
     # Check if no-auth mode is enabled
     token = os.environ.get("KWEAVER_TOKEN", "")
     if token == "__NO_AUTH__":
         # No-auth mode: skip authentication check
         return
-    
+
     # Normal mode: verify authentication
     result = await cli_agent.run_cli("auth", "status")
     if result.exit_code != 0 or "Token status:" not in result.stdout:

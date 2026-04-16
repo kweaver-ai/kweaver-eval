@@ -34,7 +34,6 @@ async def test_vega_resource_get(
     assert det.passed, det.failures
 
 
-@pytest.mark.known_bug("adp#448: GET /resources/list returns 404 when resource_type param missing — handler default branch uses wrong HTTP status")
 async def test_vega_resource_list_all(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
 ):

@@ -266,7 +266,6 @@ async def test_bkn_action_log_cancel(
     assert det.passed, det.failures
 
 
-@pytest.mark.known_bug("adp#442: invalid _instance_identities should return 400, not 500")
 async def test_bkn_action_execute_invalid_identity(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
 ):

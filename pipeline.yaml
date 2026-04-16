@@ -22,9 +22,11 @@ stages:
         - name: write-tests
           roles: [test_writer]
           max_retries: 2
+          timeout: 1800000
         - name: run-and-triage
           roles: [triage_runner]
           max_retries: 1
+          timeout: 1800000
 
   - name: report
     roles: [reporter]

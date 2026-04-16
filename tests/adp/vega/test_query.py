@@ -16,7 +16,6 @@ from lib.scorer import Scorer
 
 
 @pytest.mark.destructive
-@pytest.mark.wait_for_env("Query execute returns 500 — connector not found on dip-poc")
 async def test_vega_query_execute(
     cli_agent: CliAgent,
     scorer: Scorer,

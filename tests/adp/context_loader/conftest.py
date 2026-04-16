@@ -7,12 +7,24 @@ import pytest
 from lib.agents.cli_agent import CliAgent
 
 
-@pytest.fixture(scope="session")
-async def cl_config_active(cli_agent: CliAgent) -> bool:
-    """Ensure context-loader has an active config. Skips if not."""
+@pytest.fixture(scope="session", autouse=True)
+async def cl_config_active(cli_agent: CliAgent, cl_kn_id: str) -> bool:
+    """Ensure context-loader has an active config. Auto-configures if needed."""
     result = await cli_agent.run_cli("context-loader", "config", "show")
-    if result.exit_code != 0:
-        pytest.skip("No active context-loader config")
+    if result.exit_code == 0:
+        return True
+
+    # Auto-configure with the first available KN
+    setup = await cli_agent.run_cli(
+        "context-loader", "config", "set", "--kn-id", cl_kn_id,
+    )
+    if setup.exit_code != 0:
+        pytest.skip(f"Cannot configure context-loader: {setup.stderr[:200]}")
+
+    # Verify
+    verify = await cli_agent.run_cli("context-loader", "config", "show")
+    if verify.exit_code != 0:
+        pytest.skip("context-loader config set succeeded but show still fails")
     return True
 
 

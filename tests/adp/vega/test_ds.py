@@ -51,7 +51,6 @@ async def test_datasource_tables(cli_agent: CliAgent, scorer: Scorer, eval_case,
 
 
 @pytest.mark.destructive
-@pytest.mark.known_bug("ds delete returns 500 — backend database error on dip.aishu.cn")
 async def test_datasource_connect_and_delete(
     cli_agent: CliAgent, scorer: Scorer, eval_case, db_credentials: dict,
 ):
