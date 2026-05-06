@@ -206,7 +206,7 @@ async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str
     # KEY constraint, so the schema-level definitions in lib/eval_db.py
     # don't satisfy it on their own).
     create = await cli_agent.run_cli(
-        "bkn", "create-from-ds", ds_id, "--name", kn_name, "--no-build",
+        "bkn", "create-from-ds", ds_id, "--name", kn_name,
         "--tables", ",".join(EVAL_DB_TABLES),
         "--pk-map", EVAL_DB_PK_MAP,
         timeout=300.0,
@@ -218,6 +218,14 @@ async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str
     if isinstance(create.parsed_json, dict):
         kn_id = str(create.parsed_json.get("kn_id") or create.parsed_json.get("id") or "")
     if not kn_id:
+        await cli_agent.run_cli("ds", "delete", ds_id, "-y")
+        return None
+
+    # Step 3: wait for the build to finish so downstream tests querying
+    # object instances / relations actually find data. JobConceptConfig
+    # warnings are non-fatal (mirrors the agent-side helper).
+    build = await cli_agent.run_cli("bkn", "build", kn_id, "--wait", timeout=600.0)
+    if build.exit_code != 0 and "JobConceptConfig" not in build.stderr:
         await cli_agent.run_cli("ds", "delete", ds_id, "-y")
         return None
 
