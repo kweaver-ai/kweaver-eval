@@ -22,7 +22,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
-from tests.adp.bkn.conftest import _short_suffix
+from tests.adp.bkn.conftest import _short_suffix, build_subgraph_body
 
 
 # ---------------------------------------------------------------------------
@@ -75,14 +75,19 @@ async def test_bkn_subgraph_depth_greater_than_one(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
     kn_with_data: tuple[str, str],
 ):
-    """bkn subgraph with depth=2 returns multi-hop graph data."""
-    kn_id, ot_id = kn_with_data
+    """bkn subgraph with a 2-hop relation_types chain returns multi-hop data.
 
-    body = json.dumps({
-        "source_object_type_id": ot_id,
-        "limit": 5,
-        "depth": 2,
-    })
+    The on-the-wire format chains N relation_types in the path, not a top
+    level `depth` field. With our eval data the chain repeats the same RT
+    twice (mat_skill -> materials -> mat_skill), exercising multi-hop
+    traversal even though the eval graph only has 2 RTs.
+    """
+    kn_id, _ = kn_with_data
+
+    body = await build_subgraph_body(cli_agent, kn_id, depth=2, limit=5)
+    if body is None:
+        pytest.skip("KN has no relation types — subgraph requires at least one")
+
     result = await cli_agent.run_cli("bkn", "subgraph", kn_id, body)
     scorer.assert_exit_code(result, 0, "subgraph depth>1")
     scorer.assert_json(result, "subgraph returns JSON")

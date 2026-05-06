@@ -15,12 +15,14 @@ from lib.eval_db import EVAL_SCHEMA, bootstrap as _bootstrap_eval_db
 EVAL_PREFIX = "eval_"
 
 # Tables seeded into the eval-owned schema (see lib/eval_db.py).
-EVAL_DB_TABLES = ("materials", "skills", "mat_skill")
+EVAL_DB_TABLES = ("suppliers", "materials", "skills", "mat_skill")
 
 # BKN's `create-from-ds` auto-detect inspects sample data, not the actual
 # schema's PRIMARY KEY constraint, so we still need to spell PKs out
 # explicitly even though lib/eval_db.py defines them at the SQL level.
-EVAL_DB_PK_MAP = "materials:sku,skills:skill_id,mat_skill:sku"
+EVAL_DB_PK_MAP = (
+    "suppliers:supplier_id,materials:sku,skills:skill_id,mat_skill:sku"
+)
 
 # Directory name → pytest marker mapping
 _MODULE_MARKERS = {

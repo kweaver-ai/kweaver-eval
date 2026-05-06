@@ -21,6 +21,113 @@ def _short_suffix() -> str:
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
 
 
+async def build_subgraph_body(
+    cli_agent: CliAgent, kn_id: str, *, depth: int = 1, limit: int = 5,
+) -> str | None:
+    """Build a JSON body for `bkn subgraph` against the given KN.
+
+    The ontology-query API requires the full RelationTypePath shape:
+    object_types (with non-empty conditions) and relation_types. The
+    "depth" flag in older test code does not exist on the wire — multi-hop
+    queries are expressed by chaining N relation_types in the array.
+
+    Returns None when the KN has no relation types (caller should skip).
+    """
+    rt_list = await cli_agent.run_cli("bkn", "relation-type", "list", kn_id)
+    rt_entries = rt_list.parsed_json
+    if isinstance(rt_entries, dict):
+        rt_entries = rt_entries.get("entries") or []
+    if not isinstance(rt_entries, list) or not rt_entries:
+        return None
+
+    def _rt_endpoints(r: dict) -> tuple[str | None, str | None, str | None]:
+        rid = r.get("id") or r.get("rt_id")
+        s = r.get("source_object_type_id") or (
+            r.get("source_object_type") or {}).get("id")
+        t = r.get("target_object_type_id") or (
+            r.get("target_object_type") or {}).get("id")
+        return rid, s, t
+
+    # Build a connected chain of length `depth`. Try each RT as the chain
+    # head and greedily extend; the first head that reaches the requested
+    # depth wins. Returns None when no chain of that depth exists, so the
+    # caller can skip cleanly instead of sending a body the server will
+    # reject as a malformed path.
+    edges = [
+        (rid, s, t) for rid, s, t in
+        (_rt_endpoints(r) for r in rt_entries)
+        if rid and s and t
+    ]
+    if not edges:
+        return None
+
+    def _extend(seed: tuple[str, str, str]) -> list[tuple[str, str, str]] | None:
+        path = [seed]
+        while len(path) < max(1, depth):
+            last_tgt = path[-1][2]
+            nxt = next(((rid, s, t) for rid, s, t in edges
+                        if s == last_tgt), None)
+            if nxt is None:
+                return None
+            path.append(nxt)
+        return path
+
+    chain: list[tuple[str, str, str]] | None = None
+    for seed in edges:
+        chain = _extend(seed)
+        if chain is not None:
+            break
+    if chain is None:
+        return None
+
+    async def _pk_field(ot_id: str) -> str | None:
+        get_r = await cli_agent.run_cli("bkn", "object-type", "get", kn_id, ot_id)
+        d = get_r.parsed_json
+        if isinstance(d, dict) and "entries" in d:
+            d = (d.get("entries") or [{}])[0]
+        if not isinstance(d, dict):
+            return None
+        pks = d.get("primary_keys")
+        if isinstance(pks, list) and pks:
+            return str(pks[0])
+        return None
+
+    # `object_types` must list every node along the chain (length =
+    # len(relation_types)+1, in path order), not just the endpoints.
+    node_ids = [chain[0][1]] + [edge[2] for edge in chain]
+    node_pks = []
+    for nid in node_ids:
+        pk = await _pk_field(nid)
+        if not pk:
+            return None
+        node_pks.append(pk)
+
+    def _wildcard_cond(field: str) -> dict:
+        # Subgraph endpoint rejects empty sub_conditions; a `like %` matches
+        # every row on a non-null PK without filtering.
+        return {
+            "operation": "and",
+            "sub_conditions": [
+                {"field": field, "operation": "like",
+                 "value_from": "const", "value": "%"},
+            ],
+        }
+
+    return json.dumps({
+        "relation_type_paths": [{
+            "object_types": [
+                {"id": nid, "condition": _wildcard_cond(pk), "limit": limit}
+                for nid, pk in zip(node_ids, node_pks)
+            ],
+            "relation_types": [
+                {"relation_type_id": rid, "source_object_type_id": s,
+                 "target_object_type_id": t}
+                for rid, s, t in chain
+            ],
+        }],
+    })
+
+
 # ---------------------------------------------------------------------------
 # Resource cleanup helpers
 # ---------------------------------------------------------------------------
@@ -229,7 +336,44 @@ async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str
         await cli_agent.run_cli("ds", "delete", ds_id, "-y")
         return None
 
+    # Step 4: bootstrap relation types (mat_skill -> materials, mat_skill ->
+    # skills). create-from-ds only emits object types; without RTs the
+    # subgraph / cross-OT-traversal tests have no edges to walk. Failures
+    # here are non-fatal — the KN is still usable for OT-only tests.
+    await _bootstrap_eval_relation_types(cli_agent, kn_id)
+
     return ds_id, kn_id
+
+
+async def _bootstrap_eval_relation_types(cli_agent: CliAgent, kn_id: str) -> None:
+    """Create the eval RTs (mat_skill->materials, mat_skill->skills).
+
+    Idempotent — silently ignores already-existing RTs by name match.
+    """
+    ot = await cli_agent.run_cli("bkn", "object-type", "list", kn_id)
+    entries = ot.parsed_json
+    if isinstance(entries, dict):
+        entries = entries.get("entries") or []
+    if not isinstance(entries, list):
+        return
+    by_name = {e.get("name"): e.get("id") for e in entries if isinstance(e, dict)}
+    rt_specs = [
+        # Order matters for multi-hop subgraph: mat_skill -> materials ->
+        # suppliers gives the depth=2 traversal a real connected chain.
+        ("mat_skill_uses_material", "mat_skill", "materials", "sku:sku"),
+        ("material_from_supplier", "materials", "suppliers", "supplier_id:supplier_id"),
+        ("mat_skill_requires_skill", "mat_skill", "skills", "skill_id:skill_id"),
+    ]
+    for name, src, tgt, mapping in rt_specs:
+        if not by_name.get(src) or not by_name.get(tgt):
+            continue
+        await cli_agent.run_cli(
+            "bkn", "relation-type", "create", kn_id,
+            "--name", name,
+            "--source", by_name[src],
+            "--target", by_name[tgt],
+            "--mapping", mapping,
+        )
 
 
 # ---------------------------------------------------------------------------

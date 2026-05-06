@@ -15,14 +15,23 @@ import pymysql
 EVAL_SCHEMA = "kweaver_eval"
 
 # Table DDL — explicit primary keys so BKN auto-detection works without
-# requiring the --pk-map workaround.
+# requiring the --pk-map workaround. The graph topology is intentionally
+# 4 OTs / 3 RTs forming a chain (mat_skill -> materials -> suppliers and
+# mat_skill -> skills) so multi-hop subgraph queries have a connected
+# path to walk, not just a star.
 _DDL = [
+    """CREATE TABLE suppliers (
+        supplier_id VARCHAR(50) NOT NULL PRIMARY KEY,
+        name VARCHAR(200) NOT NULL,
+        region VARCHAR(50) NOT NULL DEFAULT 'unknown'
+    )""",
     """CREATE TABLE materials (
         sku VARCHAR(50) NOT NULL PRIMARY KEY,
         name VARCHAR(200) NOT NULL,
         current_stock INT NOT NULL DEFAULT 0,
         safety_stock INT NOT NULL DEFAULT 0,
-        material_risk VARCHAR(50) NOT NULL DEFAULT 'normal'
+        material_risk VARCHAR(50) NOT NULL DEFAULT 'normal',
+        supplier_id VARCHAR(50) NOT NULL
     )""",
     """CREATE TABLE skills (
         skill_id VARCHAR(50) NOT NULL PRIMARY KEY,
@@ -38,28 +47,37 @@ _DDL = [
 
 # Seed data — enough breadth that subgraph / filter / cross-OT-property
 # tests find real instances and shared property names. ~20 materials,
-# ~10 skills, ~30 relations.
+# ~10 skills, ~30 mat_skill relations, 5 suppliers.
+_SUPPLIERS = [
+    ("SUP-ALPHA", "Alpha Components Co", "asia"),
+    ("SUP-BETA", "Beta Industrial Ltd", "europe"),
+    ("SUP-GAMMA", "Gamma Precision Inc", "north-america"),
+    ("SUP-DELTA", "Delta Logistics Group", "asia"),
+    ("SUP-EPSILON", "Epsilon Materials SA", "europe"),
+]
+
 _MATERIALS = [
-    ("MAT-001", "Battery Cell", 40, 100, "critical"),
-    ("MAT-002", "Aluminum Frame", 350, 200, "normal"),
-    ("MAT-003", "Display Panel", 80, 120, "high"),
-    ("MAT-004", "Logic Board", 25, 60, "critical"),
-    ("MAT-005", "Cooling Fan", 410, 150, "normal"),
-    ("MAT-006", "Power Supply", 95, 80, "normal"),
-    ("MAT-007", "Steel Bracket", 800, 300, "low"),
-    ("MAT-008", "Copper Wire", 1200, 500, "low"),
-    ("MAT-009", "Plastic Casing", 220, 150, "normal"),
-    ("MAT-010", "Sensor Module", 55, 70, "high"),
-    ("MAT-011", "Memory Chip", 180, 120, "normal"),
-    ("MAT-012", "Antenna Array", 30, 50, "high"),
-    ("MAT-013", "Capacitor Set", 900, 400, "low"),
-    ("MAT-014", "Heat Sink", 140, 100, "normal"),
-    ("MAT-015", "Camera Lens", 65, 80, "high"),
-    ("SUB-001A", "Battery Cell Substitute", 200, 50, "normal"),
-    ("SUB-003A", "Display Panel Substitute", 150, 60, "normal"),
-    ("SUB-004A", "Logic Board Substitute", 90, 40, "normal"),
-    ("SUB-010A", "Sensor Module Substitute", 130, 50, "normal"),
-    ("SUB-012A", "Antenna Array Substitute", 80, 30, "normal"),
+    # (sku, name, current_stock, safety_stock, material_risk, supplier_id)
+    ("MAT-001", "Battery Cell", 40, 100, "critical", "SUP-ALPHA"),
+    ("MAT-002", "Aluminum Frame", 350, 200, "normal", "SUP-BETA"),
+    ("MAT-003", "Display Panel", 80, 120, "high", "SUP-ALPHA"),
+    ("MAT-004", "Logic Board", 25, 60, "critical", "SUP-GAMMA"),
+    ("MAT-005", "Cooling Fan", 410, 150, "normal", "SUP-DELTA"),
+    ("MAT-006", "Power Supply", 95, 80, "normal", "SUP-GAMMA"),
+    ("MAT-007", "Steel Bracket", 800, 300, "low", "SUP-BETA"),
+    ("MAT-008", "Copper Wire", 1200, 500, "low", "SUP-EPSILON"),
+    ("MAT-009", "Plastic Casing", 220, 150, "normal", "SUP-DELTA"),
+    ("MAT-010", "Sensor Module", 55, 70, "high", "SUP-ALPHA"),
+    ("MAT-011", "Memory Chip", 180, 120, "normal", "SUP-GAMMA"),
+    ("MAT-012", "Antenna Array", 30, 50, "high", "SUP-ALPHA"),
+    ("MAT-013", "Capacitor Set", 900, 400, "low", "SUP-EPSILON"),
+    ("MAT-014", "Heat Sink", 140, 100, "normal", "SUP-DELTA"),
+    ("MAT-015", "Camera Lens", 65, 80, "high", "SUP-BETA"),
+    ("SUB-001A", "Battery Cell Substitute", 200, 50, "normal", "SUP-DELTA"),
+    ("SUB-003A", "Display Panel Substitute", 150, 60, "normal", "SUP-EPSILON"),
+    ("SUB-004A", "Logic Board Substitute", 90, 40, "normal", "SUP-BETA"),
+    ("SUB-010A", "Sensor Module Substitute", 130, 50, "normal", "SUP-DELTA"),
+    ("SUB-012A", "Antenna Array Substitute", 80, 30, "normal", "SUP-EPSILON"),
 ]
 
 _SKILLS = [
@@ -115,8 +133,12 @@ def bootstrap(host: str, port: int, user: str, password: str) -> None:
             cur.execute(f"USE `{EVAL_SCHEMA}`")
             for stmt in _DDL:
                 cur.execute(stmt)
+            # Insert suppliers first — materials reference them.
             cur.executemany(
-                "INSERT INTO materials VALUES (%s, %s, %s, %s, %s)", _MATERIALS,
+                "INSERT INTO suppliers VALUES (%s, %s, %s)", _SUPPLIERS,
+            )
+            cur.executemany(
+                "INSERT INTO materials VALUES (%s, %s, %s, %s, %s, %s)", _MATERIALS,
             )
             cur.executemany(
                 "INSERT INTO skills VALUES (%s, %s, %s)", _SKILLS,
