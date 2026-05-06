@@ -14,50 +14,12 @@ from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
 
-async def _find_kn_with_schedules(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Find a KN that has action schedules. Returns (kn_id, schedule_id) or None."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
-    if result.exit_code != 0:
-        return None
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list):
-        return None
-    for kn in kns:
-        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
-        if not kn_id:
-            continue
-        sched_result = await cli_agent.run_cli(
-            "bkn", "action-schedule", "list", kn_id,
-        )
-        if sched_result.exit_code != 0:
-            continue
-        entries = sched_result.parsed_json
-        if isinstance(entries, dict):
-            entries = entries.get("entries") or entries.get("items") or []
-        if isinstance(entries, list) and entries:
-            sched_id = str(entries[0].get("id") or "")
-            if sched_id:
-                return kn_id, sched_id
-    return None
-
-
 async def test_bkn_action_schedule_list(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_schedule: tuple[str, str],
 ):
     """bkn action-schedule list returns schedules for a KN."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "5")
-    if result.exit_code != 0:
-        pytest.skip("Cannot list KNs")
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list) or not kns:
-        pytest.skip("No KNs available")
-    kn_id = str(kns[0].get("id") or kns[0].get("kn_id") or "")
-    if not kn_id:
-        pytest.skip("Cannot determine KN ID")
+    kn_id, _sched_id = kn_with_action_schedule
 
     sched_result = await cli_agent.run_cli(
         "bkn", "action-schedule", "list", kn_id,
@@ -73,12 +35,10 @@ async def test_bkn_action_schedule_list(
 
 async def test_bkn_action_schedule_get(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_schedule: tuple[str, str],
 ):
     """bkn action-schedule get returns schedule detail."""
-    found = await _find_kn_with_schedules(cli_agent)
-    if not found:
-        pytest.skip("No KN with action schedules available")
-    kn_id, sched_id = found
+    kn_id, sched_id = kn_with_action_schedule
 
     result = await cli_agent.run_cli(
         "bkn", "action-schedule", "get", kn_id, sched_id,
@@ -94,17 +54,15 @@ async def test_bkn_action_schedule_get(
 
 async def test_bkn_action_schedule_set_status(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_schedule: tuple[str, str],
 ):
     """bkn action-schedule set-status toggles schedule enable/disable."""
-    found = await _find_kn_with_schedules(cli_agent)
-    if not found:
-        pytest.skip("No KN with action schedules available")
-    kn_id, sched_id = found
+    kn_id, sched_id = kn_with_action_schedule
 
     result = await cli_agent.run_cli(
-        "bkn", "action-schedule", "set-status", kn_id, sched_id, "disable",
+        "bkn", "action-schedule", "set-status", kn_id, sched_id, "inactive",
     )
-    scorer.assert_exit_code(result, 0, "action-schedule set-status disable")
+    scorer.assert_exit_code(result, 0, "action-schedule set-status inactive")
     det = scorer.result(result.duration_ms)
     await eval_case(
         "bkn_action_schedule_set_status", [result], det, module="adp/bkn",

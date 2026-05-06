@@ -43,13 +43,13 @@ async def test_context_loader_query_object_instance_with_filter(
     """context-loader query-object-instance with a property filter."""
     kn_id, ot_id = cl_kn_with_ot
 
-    # Build a minimal filter body — empty filter {} is always valid
-    filter_body = json.dumps({})
-    result = await cli_agent.run_cli(
-        "context-loader", "query-object-instance",
-        kn_id, ot_id, filter_body,
-        "--limit", "5",
-    )
+    # CLI expects a single JSON blob: {"ot_id": ..., "condition": {...}, "limit": ...}
+    body = json.dumps({
+        "ot_id": ot_id,
+        "condition": {"operation": "and", "sub_conditions": []},
+        "limit": 5,
+    })
+    result = await cli_agent.run_cli("context-loader", "query-object-instance", body)
     if result.exit_code != 0 and "500" in result.stderr:
         pytest.skip("Server error on filtered instance query")
     scorer.assert_exit_code(result, 0, "query-object-instance with filter")
@@ -69,32 +69,36 @@ async def test_context_loader_query_instance_subgraph_depth_gt_1(
     """context-loader query-instance-subgraph with depth=2 returns multi-hop graph."""
     kn_id, ot_id = cl_kn_with_ot
 
-    # Query for a sample instance to use as the subgraph root
-    query_result = await cli_agent.run_cli(
-        "bkn", "object-type", "query", kn_id, ot_id, "--limit", "1",
-    )
-    instance_id = ""
-    if query_result.exit_code == 0 and isinstance(query_result.parsed_json, dict):
-        entries = (
-            query_result.parsed_json.get("instances")
-            or query_result.parsed_json.get("entries")
-            or []
-        )
-        if isinstance(entries, list) and entries:
-            instance_id = str(entries[0].get("id") or "")
+    # CLI expects: {"relation_type_paths": [{object_types:[...], relation_types:[...]}]}
+    # Discover a relation type to build the path
+    rt_list = await cli_agent.run_cli("bkn", "relation-type", "list", kn_id)
+    rt_entries = rt_list.parsed_json
+    if isinstance(rt_entries, dict):
+        rt_entries = rt_entries.get("entries") or rt_entries.get("items") or []
+    if not isinstance(rt_entries, list) or not rt_entries:
+        pytest.skip("No relation types available for subgraph test")
+    rt = rt_entries[0]
+    rt_id = str(rt.get("id") or "")
+    src_ot = str(rt.get("source_object_type_id") or rt.get("src_ot_id") or "")
+    tgt_ot = str(rt.get("target_object_type_id") or rt.get("tgt_ot_id") or "")
+    if not rt_id or not src_ot or not tgt_ot:
+        pytest.skip("Cannot determine RT/OT IDs for subgraph test")
 
-    if not instance_id:
-        # Try without a specific instance — pass an empty body
-        result = await cli_agent.run_cli(
-            "context-loader", "query-instance-subgraph",
-            kn_id, ot_id, json.dumps({"depth": 2, "limit": 5}),
-        )
-    else:
-        result = await cli_agent.run_cli(
-            "context-loader", "query-instance-subgraph",
-            kn_id, ot_id, instance_id,
-            "--depth", "2",
-        )
+    empty_cond = {"operation": "and", "sub_conditions": []}
+    body = json.dumps({
+        "relation_type_paths": [{
+            "object_types": [
+                {"id": src_ot, "condition": empty_cond, "limit": 3},
+                {"id": tgt_ot, "condition": empty_cond, "limit": 3},
+            ],
+            "relation_types": [{
+                "relation_type_id": rt_id,
+                "source_object_type_id": src_ot,
+                "target_object_type_id": tgt_ot,
+            }],
+        }]
+    })
+    result = await cli_agent.run_cli("context-loader", "query-instance-subgraph", body)
 
     if result.exit_code != 0 and "500" in result.stderr:
         pytest.skip("Server error on multi-hop subgraph query")

@@ -13,35 +13,6 @@ from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 
 
-async def _find_kn_with_actions(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Find a KN with action types. Returns (kn_id, at_id) or None."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
-    if result.exit_code != 0:
-        return None
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list):
-        return None
-    for kn in kns:
-        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
-        if not kn_id:
-            continue
-        at_result = await cli_agent.run_cli(
-            "bkn", "action-type", "list", kn_id,
-        )
-        if at_result.exit_code != 0:
-            continue
-        entries = at_result.parsed_json
-        if isinstance(entries, dict):
-            entries = entries.get("entries") or entries.get("items") or []
-        if isinstance(entries, list) and entries:
-            at_id = str(entries[0].get("id") or "")
-            if at_id:
-                return kn_id, at_id
-    return None
-
-
 async def _build_execute_body(
     cli_agent: CliAgent, kn_id: str, at_id: str,
 ) -> str | None:
@@ -69,12 +40,10 @@ async def _build_execute_body(
 
 async def test_bkn_action_type_list(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_type: tuple[str, str],
 ):
     """bkn action-type list returns action types for a KN."""
-    found = await _find_kn_with_actions(cli_agent)
-    if not found:
-        pytest.skip("No KN with action types available")
-    kn_id, _at_id = found
+    kn_id, _at_id = kn_with_action_type
 
     result = await cli_agent.run_cli("bkn", "action-type", "list", kn_id)
     scorer.assert_exit_code(result, 0)
@@ -86,12 +55,10 @@ async def test_bkn_action_type_list(
 
 async def test_bkn_action_type_query(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_type: tuple[str, str],
 ):
     """bkn action-type query returns action details."""
-    found = await _find_kn_with_actions(cli_agent)
-    if not found:
-        pytest.skip("No KN with action types available")
-    kn_id, at_id = found
+    kn_id, at_id = kn_with_action_type
 
     result = await cli_agent.run_cli(
         "bkn", "action-type", "query", kn_id, at_id, "{}",
@@ -106,12 +73,10 @@ async def test_bkn_action_type_query(
 @pytest.mark.destructive
 async def test_bkn_action_execute_and_log(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_type: tuple[str, str],
 ):
     """bkn action-type execute triggers an action; then check logs."""
-    found = await _find_kn_with_actions(cli_agent)
-    if not found:
-        pytest.skip("No KN with action types available")
-    kn_id, at_id = found
+    kn_id, at_id = kn_with_action_type
     steps = []
 
     # Step 1: build execute body with _instance_identities
@@ -217,12 +182,10 @@ async def test_bkn_action_execute_and_log(
 @pytest.mark.destructive
 async def test_bkn_action_log_cancel(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_type: tuple[str, str],
 ):
     """action-log cancel on a completed/non-running log returns gracefully."""
-    found = await _find_kn_with_actions(cli_agent)
-    if not found:
-        pytest.skip("No KN with action types available")
-    kn_id, _at_id = found
+    kn_id, _at_id = kn_with_action_type
 
     # Find an existing log to attempt cancel on
     log_list = await cli_agent.run_cli("bkn", "action-log", "list", kn_id)
@@ -268,12 +231,10 @@ async def test_bkn_action_log_cancel(
 
 async def test_bkn_action_execute_invalid_identity(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_type: tuple[str, str],
 ):
     """Execute with invalid _instance_identities field should return 400."""
-    found = await _find_kn_with_actions(cli_agent)
-    if not found:
-        pytest.skip("No KN with action types available")
-    kn_id, at_id = found
+    kn_id, at_id = kn_with_action_type
 
     body = json.dumps({"_instance_identities": [{"nonexistent_field": "x"}]})
     result = await cli_agent.run_cli(

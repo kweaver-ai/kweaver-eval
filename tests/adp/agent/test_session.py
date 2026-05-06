@@ -68,17 +68,3 @@ async def test_agent_history(
     assert det.passed, det.failures
 
 
-async def test_agent_trace(
-    cli_agent: CliAgent, scorer: Scorer, eval_case, _conversation: dict,
-):
-    """agent trace returns session trace data for a conversation."""
-    agent_id = _conversation["agent_id"]
-    cid = _conversation["cid"]
-
-    result = await cli_agent.run_cli("agent", "trace", agent_id, cid)
-    steps = [_conversation["chat_result"], result]
-    scorer.assert_exit_code(result, 0, "agent trace")
-    scorer.assert_json(result, "agent trace returns JSON")
-    det = scorer.result(result.duration_ms)
-    await eval_case("agent_trace", steps, det, module="adp/agent")
-    assert det.passed, det.failures

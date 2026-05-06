@@ -26,11 +26,14 @@ async def test_vega_connector_type_get(cli_agent: CliAgent, scorer: Scorer, eval
     """
     # First get list to find a type name
     list_result = await cli_agent.run_cli("vega", "connector-type", "list")
-    if list_result.exit_code != 0 or not isinstance(list_result.parsed_json, list):
+    if list_result.exit_code != 0:
         pytest.skip("Cannot list connector types")
-    if not list_result.parsed_json:
+    cts = list_result.parsed_json
+    if isinstance(cts, dict):
+        cts = cts.get("entries") or cts.get("items") or []
+    if not isinstance(cts, list) or not cts:
         pytest.skip("No connector types available")
-    ct = list_result.parsed_json[0]
+    ct = cts[0]
     ct_type = str(ct.get("type") or ct.get("name") or ct.get("id") or "")
     if not ct_type:
         pytest.skip("Cannot determine connector type identifier")

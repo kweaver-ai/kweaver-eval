@@ -62,7 +62,20 @@ async def test_dataflow_list(cli_agent: CliAgent, scorer: Scorer, eval_case):
         # Authenticated mode: full validation
         scorer.assert_exit_code(result, 0)
         scorer.assert_json(result)
-        scorer.assert_json_is_list(result, label="dataflow list returns array")
+        parsed = result.parsed_json
+        if isinstance(parsed, list):
+            entries: object = parsed
+        elif isinstance(parsed, dict):
+            entries = next(
+                (parsed[k] for k in ("dags", "entries", "data") if k in parsed),
+                None,
+            )
+        else:
+            entries = None
+        scorer.assert_true(
+            isinstance(entries, list),
+            "dataflow list returns array (accepts {dags|entries|data} envelope)",
+        )
         det = scorer.result(result.duration_ms)
         await eval_case("dataflow_list", [result], det, module="adp/dataflow")
         assert det.passed, det.failures

@@ -57,13 +57,8 @@ async def test_skill_market(cli_agent: CliAgent, scorer: Scorer, eval_case):
 async def test_skill_market_pagination(cli_agent: CliAgent, scorer: Scorer, eval_case):
     """skill market with page/size params returns paginated results."""
     result = await cli_agent.run_cli(
-        "skill", "market", "--page", "1", "--size", "5",
+        "skill", "market", "--page", "1", "--page-size", "5",
     )
-    if result.exit_code != 0 and "unknown flag" in result.stderr.lower():
-        # Fallback: try offset/limit style
-        result = await cli_agent.run_cli(
-            "skill", "market", "--limit", "5", "--offset", "0",
-        )
     scorer.assert_exit_code(result, 0, "skill market paginated")
     scorer.assert_json(result, "skill market pagination returns JSON")
     det = scorer.result(result.duration_ms)
@@ -102,13 +97,24 @@ async def test_skill_get(cli_agent: CliAgent, scorer: Scorer, eval_case):
 
 
 async def test_skill_status(cli_agent: CliAgent, scorer: Scorer, eval_case):
-    """skill status returns availability status for an installed skill."""
+    """skill set-status toggles skill status (offline → published or published → offline)."""
     skill_id = await _find_skill_id(cli_agent)
     if not skill_id:
         pytest.skip("No installed skills available")
 
-    result = await cli_agent.run_cli("skill", "status", skill_id)
-    scorer.assert_exit_code(result, 0, "skill status")
+    # Determine current status to pick a different target (avoid same-state 400)
+    get_result = await cli_agent.run_cli("skill", "get", skill_id)
+    current_status = ""
+    if get_result.exit_code == 0 and isinstance(get_result.parsed_json, dict):
+        current_status = str(get_result.parsed_json.get("status") or "")
+    target = "offline" if current_status == "published" else "published"
+
+    result = await cli_agent.run_cli("skill", "set-status", skill_id, target)
+    # Restore original status regardless
+    if result.exit_code == 0 and current_status:
+        await cli_agent.run_cli("skill", "set-status", skill_id, current_status)
+
+    scorer.assert_exit_code(result, 0, "skill set-status")
     det = scorer.result(result.duration_ms)
     await eval_case("skill_status", [result], det, module="adp/execution_factory")
     assert det.passed, det.failures

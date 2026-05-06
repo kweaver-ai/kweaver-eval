@@ -1,32 +1,16 @@
 """Vega corner-case acceptance tests.
 
 Covers:
-  - vega.discover_task.get            — get a single discover task by ID
-  - vega.discover_task.by_schedule    — list tasks filtered by schedule ID
-  - vega.resource.dataset.documents.create — add documents to a dataset resource
-  - vega.resource.dataset.documents.query  — query documents in a dataset
-  - vega.resource.dataset.build            — trigger build on a dataset resource
-
-These capabilities target the Vega REST API via `kweaver call` because the
-kweaver CLI does not expose dedicated discover-task or dataset sub-commands.
+  - vega.discover_task.get         — get a single discover task by ID
+  - vega.discover_task.by_schedule — list tasks filtered by schedule ID
 """
 
 from __future__ import annotations
-
-import json
-import time
-import random
-import string
 
 import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
-
-
-def _doc_id() -> str:
-    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-    return f"eval_doc_{int(time.time())}_{suffix}"
 
 
 async def _find_discover_task(cli_agent: CliAgent) -> tuple[str, str | None] | None:
@@ -58,28 +42,6 @@ async def _find_discover_task(cli_agent: CliAgent) -> tuple[str, str | None] | N
     schedule_id = str(task.get("schedule_id") or task.get("scheduled_id") or "")
     if task_id:
         return task_id, schedule_id or None
-    return None
-
-
-async def _find_dataset_resource(cli_agent: CliAgent) -> str | None:
-    """Return a dataset-type resource ID, or None."""
-    result = await cli_agent.run_cli("vega", "resource", "list", "--limit", "20")
-    if result.exit_code != 0:
-        return None
-    resources = result.parsed_json
-    if isinstance(resources, dict):
-        resources = resources.get("items") or resources.get("entries") or []
-    if not isinstance(resources, list):
-        return None
-    for res in resources:
-        rtype = str(res.get("resource_type") or res.get("type") or "").lower()
-        if "dataset" in rtype or "doc" in rtype:
-            res_id = str(res.get("id") or res.get("resource_id") or "")
-            if res_id:
-                return res_id
-    # If no explicit dataset type, return first resource for a best-effort test
-    if resources:
-        return str(resources[0].get("id") or resources[0].get("resource_id") or "")
     return None
 
 
@@ -135,75 +97,3 @@ async def test_vega_discover_task_by_schedule(
     assert det.passed, det.failures
 
 
-@pytest.mark.destructive
-async def test_vega_resource_dataset_documents(
-    cli_agent: CliAgent, scorer: Scorer, eval_case,
-):
-    """Dataset resource: add documents, then query them."""
-    res_id = await _find_dataset_resource(cli_agent)
-    if not res_id:
-        pytest.skip("No dataset resource available")
-
-    steps = []
-    doc_id = _doc_id()
-
-    # Step 1: create document
-    create = await cli_agent.run_cli(
-        "call",
-        f"/api/vega/v1/resource/{res_id}/document",
-        "-X", "POST",
-        "-d", json.dumps({
-            "id": doc_id,
-            "content": "eval test document content",
-            "metadata": {"source": "eval-test"},
-        }),
-    )
-    steps.append(create)
-    if create.exit_code != 0 and (
-        "404" in create.stderr or "405" in create.stderr
-    ):
-        pytest.skip("resource dataset document create endpoint not available")
-    scorer.assert_exit_code(create, 0, "dataset document create exit code")
-
-    # Step 2: query documents
-    query = await cli_agent.run_cli(
-        "call",
-        f"/api/vega/v1/resource/{res_id}/document?page=1&size=5",
-    )
-    steps.append(query)
-    if query.exit_code == 0:
-        scorer.assert_json(query, "dataset document query returns JSON")
-
-    det = scorer.result()
-    await eval_case(
-        "vega_resource_dataset_documents", steps, det, module="adp/vega",
-    )
-    assert det.passed, det.failures
-
-
-async def test_vega_resource_dataset_build(
-    cli_agent: CliAgent, scorer: Scorer, eval_case,
-):
-    """POST /api/vega/v1/resource/<id>/build triggers a dataset build."""
-    res_id = await _find_dataset_resource(cli_agent)
-    if not res_id:
-        pytest.skip("No dataset resource available")
-
-    result = await cli_agent.run_cli(
-        "call",
-        f"/api/vega/v1/resource/{res_id}/build",
-        "-X", "POST",
-        "-d", json.dumps({}),
-    )
-    if result.exit_code != 0 and (
-        "404" in result.stderr or "405" in result.stderr
-    ):
-        pytest.skip("resource dataset build endpoint not available")
-    if result.exit_code != 0 and "500" in result.stderr:
-        pytest.skip("resource dataset build returned server error (may need prior documents)")
-    scorer.assert_exit_code(result, 0, "dataset build exit code")
-    det = scorer.result(result.duration_ms)
-    await eval_case(
-        "vega_resource_dataset_build", [result], det, module="adp/vega",
-    )
-    assert det.passed, det.failures

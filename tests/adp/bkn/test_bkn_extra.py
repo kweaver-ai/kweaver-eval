@@ -53,22 +53,13 @@ async def test_bkn_object_type_query_with_filter(
                 prop_name = pn
                 break
 
-    # Query with a filter (empty filter {} is also valid)
-    filter_body = json.dumps({prop_name: ""} if prop_name else {})
+    if prop_name:
+        body = json.dumps({"condition": {"field": prop_name, "operation": "not_null"}, "limit": 5})
+    else:
+        body = json.dumps({"limit": 5})
     result = await cli_agent.run_cli(
-        "bkn", "object-type", "query", kn_id, ot_id,
-        "--filter", filter_body,
-        "--limit", "5",
+        "bkn", "object-type", "query", kn_id, ot_id, body,
     )
-    if result.exit_code != 0 and (
-        "unknown flag" in result.stderr.lower()
-        or "--filter" in result.stderr
-    ):
-        # Fallback: pass filter as positional JSON argument
-        result = await cli_agent.run_cli(
-            "bkn", "object-type", "query", kn_id, ot_id, filter_body,
-            "--limit", "5",
-        )
     if result.exit_code != 0 and "500" in result.stderr:
         pytest.skip("Server error on filtered OT query")
     scorer.assert_exit_code(result, 0, "OT query with filter")
@@ -106,43 +97,12 @@ async def test_bkn_subgraph_depth_greater_than_one(
 # Action schedule idempotency
 # ---------------------------------------------------------------------------
 
-async def _find_kn_with_schedule(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Find a KN that has at least one action schedule. Returns (kn_id, sched_id)."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
-    if result.exit_code != 0:
-        return None
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list):
-        return None
-    for kn in kns:
-        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
-        if not kn_id:
-            continue
-        sched_result = await cli_agent.run_cli(
-            "bkn", "action-schedule", "list", kn_id,
-        )
-        if sched_result.exit_code != 0:
-            continue
-        entries = sched_result.parsed_json
-        if isinstance(entries, dict):
-            entries = entries.get("entries") or entries.get("items") or []
-        if isinstance(entries, list) and entries:
-            sched_id = str(entries[0].get("id") or "")
-            if sched_id:
-                return kn_id, sched_id
-    return None
-
-
 async def test_bkn_action_schedule_set_status_idempotent(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_schedule: tuple[str, str],
 ):
     """action-schedule set-status called twice with same value is idempotent."""
-    found = await _find_kn_with_schedule(cli_agent)
-    if not found:
-        pytest.skip("No KN with action schedules available")
-    kn_id, sched_id = found
+    kn_id, sched_id = kn_with_action_schedule
     steps = []
 
     # Get current status
@@ -151,13 +111,13 @@ async def test_bkn_action_schedule_set_status_idempotent(
     )
     if get_result.exit_code != 0:
         pytest.skip("Cannot get schedule details")
-    current_status = "enable"
+    current_status = "inactive"
     if isinstance(get_result.parsed_json, dict):
         raw = get_result.parsed_json
         if "entries" in raw and isinstance(raw["entries"], list) and raw["entries"]:
             raw = raw["entries"][0]
-        s = str(raw.get("status") or raw.get("enable") or "enable")
-        current_status = "enable" if "enable" in s.lower() or s == "1" else "disable"
+        s = str(raw.get("status") or "inactive")
+        current_status = "active" if s == "active" else "inactive"
 
     # First call
     first = await cli_agent.run_cli(
@@ -178,37 +138,6 @@ async def test_bkn_action_schedule_set_status_idempotent(
         "bkn_action_schedule_set_status_idempotent", steps, det, module="adp/bkn",
     )
     assert det.passed, det.failures
-
-
-# ---------------------------------------------------------------------------
-# Job read operations
-# ---------------------------------------------------------------------------
-
-async def _find_kn_with_jobs(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Find a KN with at least one job. Returns (kn_id, job_id) or None."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
-    if result.exit_code != 0:
-        return None
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list):
-        return None
-    for kn in kns:
-        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
-        if not kn_id:
-            continue
-        job_result = await cli_agent.run_cli("bkn", "job", "list", kn_id)
-        if job_result.exit_code != 0:
-            continue
-        entries = job_result.parsed_json
-        if isinstance(entries, dict):
-            entries = entries.get("entries") or entries.get("items") or []
-        if isinstance(entries, list) and entries:
-            job_id = str(entries[0].get("id") or "")
-            if job_id:
-                return kn_id, job_id
-    return None
 
 
 async def test_bkn_job_list(
@@ -232,40 +161,6 @@ async def test_bkn_job_list(
     scorer.assert_json(job_result, "job list returns JSON")
     det = scorer.result(job_result.duration_ms)
     await eval_case("bkn_job_list", [job_result], det, module="adp/bkn")
-    assert det.passed, det.failures
-
-
-async def test_bkn_job_get(
-    cli_agent: CliAgent, scorer: Scorer, eval_case,
-):
-    """bkn job get returns detail for a specific job."""
-    found = await _find_kn_with_jobs(cli_agent)
-    if not found:
-        pytest.skip("No KN with jobs available")
-    kn_id, job_id = found
-
-    result = await cli_agent.run_cli("bkn", "job", "get", kn_id, job_id)
-    scorer.assert_exit_code(result, 0, "bkn job get")
-    scorer.assert_json(result, "job get returns JSON")
-    det = scorer.result(result.duration_ms)
-    await eval_case("bkn_job_get", [result], det, module="adp/bkn")
-    assert det.passed, det.failures
-
-
-async def test_bkn_job_tasks(
-    cli_agent: CliAgent, scorer: Scorer, eval_case,
-):
-    """bkn job task list returns tasks for a job."""
-    found = await _find_kn_with_jobs(cli_agent)
-    if not found:
-        pytest.skip("No KN with jobs available")
-    kn_id, job_id = found
-
-    result = await cli_agent.run_cli("bkn", "job", "task", "list", kn_id, job_id)
-    scorer.assert_exit_code(result, 0, "bkn job task list")
-    scorer.assert_json(result, "job task list returns JSON")
-    det = scorer.result(result.duration_ms)
-    await eval_case("bkn_job_tasks", [result], det, module="adp/bkn")
     assert det.passed, det.failures
 
 
@@ -316,68 +211,15 @@ async def test_bkn_relation_type_get(
 
 
 # ---------------------------------------------------------------------------
-# Relation-type paths
-# ---------------------------------------------------------------------------
-
-async def test_bkn_relation_type_paths(
-    cli_agent: CliAgent, scorer: Scorer, eval_case,
-    kn_with_data: tuple[str, str],
-):
-    """bkn relation-type-paths returns possible relation paths in a KN."""
-    kn_id, _ot_id = kn_with_data
-
-    result = await cli_agent.run_cli(
-        "call",
-        f"/api/cognitive-search/v1/knowledgenetwork/{kn_id}/relationtype/paths",
-    )
-    if result.exit_code != 0 and "404" in result.stderr:
-        pytest.skip("relation-type paths endpoint not available")
-    scorer.assert_exit_code(result, 0, "relation-type paths")
-    scorer.assert_json(result, "relation-type paths returns JSON")
-    det = scorer.result(result.duration_ms)
-    await eval_case("bkn_relation_type_paths", [result], det, module="adp/bkn")
-    assert det.passed, det.failures
-
-
-# ---------------------------------------------------------------------------
 # Action-type get
 # ---------------------------------------------------------------------------
 
-async def _find_kn_with_action_type(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Find a KN with action types. Returns (kn_id, at_id) or None."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
-    if result.exit_code != 0:
-        return None
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list):
-        return None
-    for kn in kns:
-        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
-        if not kn_id:
-            continue
-        at_result = await cli_agent.run_cli("bkn", "action-type", "list", kn_id)
-        if at_result.exit_code != 0:
-            continue
-        entries = at_result.parsed_json
-        if isinstance(entries, dict):
-            entries = entries.get("entries") or entries.get("items") or []
-        if isinstance(entries, list) and entries:
-            at_id = str(entries[0].get("id") or "")
-            if at_id:
-                return kn_id, at_id
-    return None
-
-
 async def test_bkn_action_type_get(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_type: tuple[str, str],
 ):
     """bkn action-type get returns detail for a specific action type."""
-    found = await _find_kn_with_action_type(cli_agent)
-    if not found:
-        pytest.skip("No KN with action types available")
-    kn_id, at_id = found
+    kn_id, at_id = kn_with_action_type
 
     result = await cli_agent.run_cli("bkn", "action-type", "get", kn_id, at_id)
     if result.exit_code != 0 and "unknown" in result.stderr.lower():

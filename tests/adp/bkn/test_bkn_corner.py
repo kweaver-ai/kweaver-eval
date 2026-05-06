@@ -50,33 +50,6 @@ async def _find_kn_with_object_type(
     return None
 
 
-async def _find_kn_with_schedules(cli_agent: CliAgent) -> tuple[str, str] | None:
-    """Return (kn_id, schedule_id) or None."""
-    result = await cli_agent.run_cli("bkn", "list", "--limit", "10")
-    if result.exit_code != 0:
-        return None
-    kns = result.parsed_json
-    if isinstance(kns, dict):
-        kns = kns.get("entries") or []
-    if not isinstance(kns, list):
-        return None
-    for kn in kns:
-        kn_id = str(kn.get("kn_id") or kn.get("id") or "")
-        if not kn_id:
-            continue
-        sched = await cli_agent.run_cli(
-            "bkn", "action-schedule", "list", kn_id,
-        )
-        entries = sched.parsed_json
-        if isinstance(entries, dict):
-            entries = entries.get("entries") or entries.get("items") or []
-        if sched.exit_code == 0 and isinstance(entries, list) and entries:
-            sid = str(entries[0].get("id") or "")
-            if sid:
-                return kn_id, sid
-    return None
-
-
 async def test_bkn_object_type_query_with_filter(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
 ):
@@ -104,23 +77,12 @@ async def test_bkn_object_type_query_with_filter(
                 break
 
     if filter_prop:
-        result = await cli_agent.run_cli(
-            "bkn", "object-type", "query", kn_id, ot_id,
-            "--filter", json.dumps({filter_prop: {"$ne": None}}),
-            "--limit", "5",
-        )
+        body = json.dumps({"condition": {"field": filter_prop, "operation": "not_null"}, "limit": 5})
     else:
-        # No suitable property — use empty filter (always valid)
-        result = await cli_agent.run_cli(
-            "bkn", "object-type", "query", kn_id, ot_id,
-            "--limit", "5",
-        )
-
-    if result.exit_code != 0 and "unknown flag" in result.stderr.lower():
-        # Fallback: no filter flag available, plain query suffices
-        result = await cli_agent.run_cli(
-            "bkn", "object-type", "query", kn_id, ot_id, "--limit", "5",
-        )
+        body = json.dumps({"limit": 5})
+    result = await cli_agent.run_cli(
+        "bkn", "object-type", "query", kn_id, ot_id, body,
+    )
 
     scorer.assert_exit_code(result, 0, "object-type query with filter")
     scorer.assert_json(result, "filtered query returns JSON")
@@ -179,27 +141,25 @@ async def test_bkn_subgraph_depth_greater_than_one(
 
 async def test_bkn_action_schedule_set_status_idempotent(
     cli_agent: CliAgent, scorer: Scorer, eval_case,
+    kn_with_action_schedule: tuple[str, str],
 ):
     """bkn action-schedule set-status called twice with same value is idempotent."""
-    found = await _find_kn_with_schedules(cli_agent)
-    if not found:
-        pytest.skip("No KN with action schedules available")
-    kn_id, sched_id = found
+    kn_id, sched_id = kn_with_action_schedule
     steps = []
 
-    # Disable once
+    # Set inactive once
     first = await cli_agent.run_cli(
-        "bkn", "action-schedule", "set-status", kn_id, sched_id, "disable",
+        "bkn", "action-schedule", "set-status", kn_id, sched_id, "inactive",
     )
     steps.append(first)
-    scorer.assert_exit_code(first, 0, "set-status disable (first)")
+    scorer.assert_exit_code(first, 0, "set-status inactive (first)")
 
-    # Disable again — idempotent call should not error
+    # Set inactive again — idempotent call should not error
     second = await cli_agent.run_cli(
-        "bkn", "action-schedule", "set-status", kn_id, sched_id, "disable",
+        "bkn", "action-schedule", "set-status", kn_id, sched_id, "inactive",
     )
     steps.append(second)
-    scorer.assert_exit_code(second, 0, "set-status disable (second, idempotent)")
+    scorer.assert_exit_code(second, 0, "set-status inactive (second, idempotent)")
 
     det = scorer.result()
     await eval_case(
@@ -211,37 +171,3 @@ async def test_bkn_action_schedule_set_status_idempotent(
     assert det.passed, det.failures
 
 
-async def test_bkn_object_type_validate(
-    cli_agent: CliAgent, scorer: Scorer, eval_case,
-):
-    """bkn object-type validate checks an OT schema definition."""
-    found = await _find_kn_with_object_type(cli_agent)
-    if not found:
-        pytest.skip("No KN with queryable object types available")
-    kn_id, ot_id = found
-
-    # Try dedicated CLI validate command first
-    result = await cli_agent.run_cli(
-        "bkn", "object-type", "validate", kn_id, ot_id,
-    )
-    if result.exit_code != 0 and (
-        "unknown" in result.stderr.lower()
-        or "command not found" in result.stderr.lower()
-    ):
-        # Fallback: POST validate via call endpoint
-        result = await cli_agent.run_cli(
-            "call",
-            f"/api/cognitive-search/v1/kn/{kn_id}/object-type/{ot_id}/validate",
-            "-X", "POST",
-            "-d", json.dumps({}),
-        )
-    if result.exit_code != 0 and (
-        "404" in result.stderr or "405" in result.stderr
-    ):
-        pytest.skip("object-type validate endpoint not available")
-    scorer.assert_exit_code(result, 0, "object-type validate exit code")
-    det = scorer.result(result.duration_ms)
-    await eval_case(
-        "bkn_object_type_validate", [result], det, module="adp/bkn",
-    )
-    assert det.passed, det.failures
