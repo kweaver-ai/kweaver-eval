@@ -6,6 +6,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 @pytest.mark.smoke
@@ -67,7 +68,7 @@ async def test_bkn_create_and_delete(cli_agent: CliAgent, scorer: Scorer, eval_c
     import time
     from tests.adp.bkn.conftest import _short_suffix
 
-    kn_name = f"eval_empty_{int(time.time())}_{_short_suffix()}"
+    kn_name = f"{EVAL_PREFIX}empty_{int(time.time())}_{_short_suffix()}"
     kn_id = ""
     steps = []
 
@@ -115,7 +116,7 @@ async def test_bkn_update(cli_agent: CliAgent, scorer: Scorer, eval_case):
     import time
     from tests.adp.bkn.conftest import _short_suffix
 
-    kn_name = f"eval_upd_{int(time.time())}_{_short_suffix()}"
+    kn_name = f"{EVAL_PREFIX}upd_{int(time.time())}_{_short_suffix()}"
     kn_id = ""
     steps = []
 
@@ -133,7 +134,7 @@ async def test_bkn_update(cli_agent: CliAgent, scorer: Scorer, eval_case):
             pytest.skip("Cannot get KN ID from create")
 
         # Update name
-        new_name = f"eval_upd_renamed_{int(time.time())}_{_short_suffix()}"
+        new_name = f"{EVAL_PREFIX}upd_renamed_{int(time.time())}_{_short_suffix()}"
         update = await cli_agent.run_cli(
             "bkn", "update", kn_id, "--name", new_name,
         )

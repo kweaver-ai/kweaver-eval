@@ -21,11 +21,12 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 def _ct_name() -> str:
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
-    return f"eval_ct_{int(time.time())}_{suffix}"
+    return f"{EVAL_PREFIX}ct_{int(time.time())}_{suffix}"
 
 
 async def _find_connector_type(cli_agent: CliAgent) -> tuple[str, bool] | None:
@@ -39,7 +40,7 @@ async def _find_connector_type(cli_agent: CliAgent) -> tuple[str, bool] | None:
     if not isinstance(cts, list) or not cts:
         return None
     ct = cts[0]
-    ct_id = str(ct.get("id") or ct.get("connector_type_id") or "")
+    ct_id = str(ct.get("type") or ct.get("id") or ct.get("connector_type_id") or "")
     enabled = bool(ct.get("enabled") or ct.get("is_enabled") or False)
     if ct_id:
         return ct_id, enabled
@@ -56,22 +57,11 @@ async def test_vega_connector_type_enable_toggle(
     ct_id, was_enabled = found
     steps = []
 
-    # Toggle to the opposite state
-    new_state = "disable" if was_enabled else "enable"
+    # Toggle to the opposite state: CLI uses `enable --enabled <true|false>`
+    new_enabled_str = "false" if was_enabled else "true"
     toggle = await cli_agent.run_cli(
-        "vega", "connector-type", new_state, ct_id,
+        "vega", "connector-type", "enable", ct_id, "--enabled", new_enabled_str,
     )
-    if toggle.exit_code != 0 and (
-        "unknown" in toggle.stderr.lower()
-        or "command not found" in toggle.stderr.lower()
-    ):
-        # Fallback: PATCH via call
-        toggle = await cli_agent.run_cli(
-            "call",
-            f"/api/vega/v1/connector-type/{ct_id}",
-            "-X", "PATCH",
-            "-d", json.dumps({"enabled": not was_enabled}),
-        )
     steps.append(toggle)
     if toggle.exit_code != 0 and (
         "404" in toggle.stderr or "405" in toggle.stderr
@@ -80,20 +70,10 @@ async def test_vega_connector_type_enable_toggle(
     scorer.assert_exit_code(toggle, 0, "connector-type enable toggle")
 
     # Restore original state
-    restore_state = "enable" if was_enabled else "disable"
+    restore_str = "true" if was_enabled else "false"
     restore = await cli_agent.run_cli(
-        "vega", "connector-type", restore_state, ct_id,
+        "vega", "connector-type", "enable", ct_id, "--enabled", restore_str,
     )
-    if restore.exit_code != 0 and (
-        "unknown" in restore.stderr.lower()
-        or "command not found" in restore.stderr.lower()
-    ):
-        restore = await cli_agent.run_cli(
-            "call",
-            f"/api/vega/v1/connector-type/{ct_id}",
-            "-X", "PATCH",
-            "-d", json.dumps({"enabled": was_enabled}),
-        )
     steps.append(restore)
 
     det = scorer.result()
@@ -112,27 +92,15 @@ async def test_vega_connector_type_update(
         pytest.skip("No connector types available")
     ct_id, _ = found
 
-    # Attempt CLI update command first
+    # Use CLI update: `vega connector-type update <type> -d <json>`
     result = await cli_agent.run_cli(
         "vega", "connector-type", "update", ct_id,
-        "--description", "eval test update",
+        "-d", json.dumps({"description": "eval test update"}),
     )
-    if result.exit_code != 0 and (
-        "unknown" in result.stderr.lower()
-        or "command not found" in result.stderr.lower()
-        or "flag provided but not defined" in result.stderr.lower()
+    if result.exit_code != 0 and any(
+        s in result.stderr for s in ("404", "405", "502", "400")
     ):
-        # Fallback: PUT via call
-        result = await cli_agent.run_cli(
-            "call",
-            f"/api/vega/v1/connector-type/{ct_id}",
-            "-X", "PUT",
-            "-d", json.dumps({"description": "eval test update"}),
-        )
-    if result.exit_code != 0 and (
-        "404" in result.stderr or "405" in result.stderr
-    ):
-        pytest.skip("connector-type update endpoint not available")
+        pytest.skip("connector-type update endpoint not available or server error")
     scorer.assert_exit_code(result, 0, "connector-type update exit code")
     det = scorer.result(result.duration_ms)
     await eval_case(

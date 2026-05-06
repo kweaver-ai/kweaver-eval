@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 import time
 import random
 import string
@@ -21,10 +22,11 @@ import pytest
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 from tests.adp.bkn.conftest import _short_suffix
+from tests.adp.conftest import EVAL_PREFIX
 
 
 def _group_name() -> str:
-    return f"eval_cg_{int(time.time())}_{_short_suffix()}"
+    return f"{EVAL_PREFIX}cg_{int(time.time())}_{_short_suffix()}"
 
 
 async def test_bkn_concept_group_list(
@@ -53,7 +55,7 @@ async def test_bkn_concept_group_lifecycle(
     try:
         # Create
         create = await cli_agent.run_cli(
-            "bkn", "concept-group", "create", kn_id, "--name", name,
+            "bkn", "concept-group", "create", kn_id, json.dumps({"name": name}),
         )
         steps.append(create)
         scorer.assert_exit_code(create, 0, "concept-group create")
@@ -80,7 +82,7 @@ async def test_bkn_concept_group_lifecycle(
             new_name = f"{name}_upd"
             update = await cli_agent.run_cli(
                 "bkn", "concept-group", "update", kn_id, group_id,
-                "--name", new_name,
+                json.dumps({"name": new_name}),
             )
             steps.append(update)
             scorer.assert_exit_code(update, 0, "concept-group update")
@@ -121,7 +123,7 @@ async def test_bkn_concept_group_add_remove_object_types(
     try:
         # Create group
         create = await cli_agent.run_cli(
-            "bkn", "concept-group", "create", kn_id, "--name", name,
+            "bkn", "concept-group", "create", kn_id, json.dumps({"name": name}),
         )
         steps.append(create)
         scorer.assert_exit_code(create, 0, "concept-group create")
@@ -136,19 +138,19 @@ async def test_bkn_concept_group_add_remove_object_types(
 
         # Add object type
         add = await cli_agent.run_cli(
-            "bkn", "concept-group", "add-object-types",
+            "bkn", "concept-group", "add-members",
             kn_id, group_id, ot_id,
         )
         steps.append(add)
-        scorer.assert_exit_code(add, 0, "concept-group add-object-types")
+        scorer.assert_exit_code(add, 0, "concept-group add-members")
 
         # Remove object type
         remove = await cli_agent.run_cli(
-            "bkn", "concept-group", "remove-object-types",
+            "bkn", "concept-group", "remove-members",
             kn_id, group_id, ot_id,
         )
         steps.append(remove)
-        scorer.assert_exit_code(remove, 0, "concept-group remove-object-types")
+        scorer.assert_exit_code(remove, 0, "concept-group remove-members")
 
     finally:
         if group_id:

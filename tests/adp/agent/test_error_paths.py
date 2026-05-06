@@ -6,6 +6,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 async def test_agent_get_invalid_id(
@@ -102,7 +103,7 @@ async def test_agent_create_duplicate_key(
     existing_key = owned_agent["key"]
     result = await cli_agent.run_cli(
         "agent", "create",
-        "--name", "eval_dup_key_test",
+        "--name", f"{EVAL_PREFIX}dup_key_test",
         "--profile", "Duplicate key test — should fail",
         "--key", existing_key,
         "--system-prompt", "test",

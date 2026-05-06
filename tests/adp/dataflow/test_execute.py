@@ -12,6 +12,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 @pytest.mark.api
@@ -25,7 +26,7 @@ async def test_dataflow_run_with_url(
     """
     # Use a simple test URL (this is a smoke test, not functional validation)
     test_url = "https://httpbin.org/get"
-    test_name = f"eval_test_run_{df_id[:8]}"
+    test_name = f"{EVAL_PREFIX}test_run_{df_id[:8]}"
     
     result = await cli_agent.run_cli(
         "dataflow", "run", df_id,

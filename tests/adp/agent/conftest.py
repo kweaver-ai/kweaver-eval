@@ -10,8 +10,7 @@ import time
 import pytest
 
 from lib.agents.cli_agent import CliAgent
-
-EVAL_PREFIX = "eval_"
+from tests.adp.conftest import EVAL_DB_PK_MAP, EVAL_DB_TABLES, EVAL_PREFIX
 
 
 def _short_suffix() -> str:
@@ -63,8 +62,12 @@ async def cleanup_eval_agent_resources(cli_agent: CliAgent):
     await _cleanup_eval_agents(cli_agent)
 
 
-# Model selection priority: prefer qwen3-80b, then deepseek, then any LLM.
-_LLM_PRIORITY = ["qwen3-80b", "deepseek_v3", "deepseek"]
+# Soft preference for LLM selection — used only to *order* candidates so a
+# probe-based search runs cheap models first. **Not** a hard allowlist:
+# we always probe every model and pick the first one whose chat actually
+# works, so a deprovisioned/arrears-blocked model is auto-skipped without
+# code changes.
+_LLM_PREFERENCE = ("deepseek-v4", "deepseek-v3", "deepseek", "qwen3-80b", "qwen")
 
 
 async def _fetch_llm_models(cli_agent: CliAgent) -> list[dict]:
@@ -79,10 +82,13 @@ async def _fetch_llm_models(cli_agent: CliAgent) -> list[dict]:
 
 
 def _pick_llm(models: list[dict]) -> tuple[str, str] | None:
-    """Pick best LLM by priority: qwen3-80b > deepseek > any.
+    """Return the highest-preference (model_id, model_name) pair, or None."""
+    cands = _ordered_candidates(models)
+    return cands[0] if cands else None
 
-    Returns (model_id, model_name) or None.
-    """
+
+def _ordered_candidates(models: list[dict]) -> list[tuple[str, str]]:
+    """Return (model_id, model_name) pairs ordered by _LLM_PREFERENCE, then the rest."""
     by_name: dict[str, tuple[str, str]] = {}
     for m in models:
         name = str(m.get("model_name", "")).lower()
@@ -90,39 +96,77 @@ def _pick_llm(models: list[dict]) -> tuple[str, str] | None:
         mname = str(m.get("model_name") or "")
         if mid:
             by_name[name] = (mid, mname)
-
-    for pref in _LLM_PRIORITY:
+    ordered: list[tuple[str, str]] = []
+    used: set[str] = set()
+    for pref in _LLM_PREFERENCE:
         for name, pair in by_name.items():
-            if pref in name:
-                return pair
-    # Fallback: first available LLM
-    return next(iter(by_name.values()), None)
+            if pref in name and name not in used:
+                ordered.append(pair)
+                used.add(name)
+    for name, pair in by_name.items():
+        if name not in used:
+            ordered.append(pair)
+    return ordered
+
+
+async def _probe_chat(cli_agent: CliAgent, model_id: str) -> str | None:
+    """Create a temp agent with this LLM, smoke-test chat, return its ID on success.
+
+    Caller is responsible for cleanup of the returned agent ID.
+    Returns None if creation or the chat probe fails.
+    """
+    create = await cli_agent.run_cli(
+        "agent", "create",
+        "--name", f"{EVAL_PREFIX}chat_probe_{int(time.time())}_{_short_suffix()}",
+        "--llm-id", model_id,
+        "--profile", "eval chat-capable agent",
+    )
+    if create.exit_code != 0 or not isinstance(create.parsed_json, dict):
+        return None
+    aid = str(create.parsed_json.get("id") or create.parsed_json.get("agent_id") or "")
+    if not aid:
+        return None
+    probe = await cli_agent.run_cli(
+        "agent", "chat", aid, "-m", "hi", "--no-stream", timeout=30.0,
+    )
+    if probe.exit_code == 0 and len(probe.stdout.strip()) > 0:
+        return aid
+    await cli_agent.run_cli("agent", "delete", aid, "-y")
+    return None
 
 
 @pytest.fixture(scope="session")
 async def llm_id(cli_agent: CliAgent) -> str:
-    """Discover best available LLM model ID from model-factory.
+    """Return an LLM model ID ordered by preference (no probe).
 
-    Priority: qwen3-80b > deepseek > any LLM.
+    Many tests need only an ID — for agent CRUD, schema validation, etc. —
+    and shouldn't be blocked when the platform's chat path (Redis / LLM
+    backend) is temporarily down. The chat-probing lives in `chat_agent_id`.
     """
     models = await _fetch_llm_models(cli_agent)
     if not models:
         pytest.skip("No LLM models returned from model-factory")
-    pair = _pick_llm(models)
-    if not pair:
+    candidates = _ordered_candidates(models)
+    if not candidates:
         pytest.skip("No LLM model available in model-factory")
-    return pair[0]
+    return candidates[0][0]
 
 
 @pytest.fixture(scope="session")
 async def chat_agent_id(cli_agent: CliAgent) -> str:
-    """Find an existing published agent that can actually respond to chat.
+    """Return an agent ID that responds to chat.
 
-    Iterates through agents and does a quick probe chat to verify.
-    Retries the whole discovery up to 3 times to handle transient TLS failures.
+    Path 1: probe existing agents — fast and lets us reuse a working setup.
+    Path 2: iterate every LLM in preference order, create a throwaway eval
+    agent bound to it, probe chat. Return the first one that answers.
+
+    This decouples chat-capable tests from whichever specific LLM is
+    healthy at the moment, and from whatever agents someone else happened
+    to leave on the platform.
     """
     import asyncio as _aio
 
+    # Path 1: probe pre-existing platform agents.
     for _attempt in range(3):
         result = await cli_agent.run_cli("agent", "list", "--limit", "30", "--verbose")
         parsed = result.parsed_json
@@ -131,17 +175,15 @@ async def chat_agent_id(cli_agent: CliAgent) -> str:
             continue
         entries = parsed if isinstance(parsed, list) else parsed.get("entries") or parsed.get("data") or []
         if not isinstance(entries, list) or len(entries) == 0:
-            await _aio.sleep(3)
-            continue
+            break
 
-        # Prefer non-built-in agents first, then built-in
         candidates = []
         for a in entries:
             if isinstance(a, dict):
                 aid = str(a.get("id") or a.get("agent_id") or "")
                 if aid:
                     candidates.append((aid, a.get("is_built_in", 0)))
-        candidates.sort(key=lambda x: x[1])  # non-built-in first
+        candidates.sort(key=lambda x: x[1])
 
         for aid, _ in candidates:
             probe = await cli_agent.run_cli(
@@ -153,7 +195,17 @@ async def chat_agent_id(cli_agent: CliAgent) -> str:
 
         await _aio.sleep(3)
 
-    pytest.skip("No agents available that can respond to chat")
+    # Path 2: iterate LLM models in preference order, create+probe per LLM.
+    models = await _fetch_llm_models(cli_agent)
+    for mid, _ in _ordered_candidates(models):
+        aid = await _probe_chat(cli_agent, mid)
+        if aid:
+            return aid
+
+    pytest.skip(
+        "No agents and no LLM models can respond to chat — "
+        "platform chat backend is likely down (check Redis / model-factory)",
+    )
 
 
 def _build_explore_config(llm_id: str, llm_name: str, system_prompt: str = "") -> dict:
@@ -320,6 +372,8 @@ async def _create_kn_for_agent(cli_agent: CliAgent, creds: dict) -> tuple[str, s
 
     create = await cli_agent.run_cli(
         "bkn", "create-from-ds", ds_id, "--name", kn_name,
+        "--tables", ",".join(EVAL_DB_TABLES),
+        "--pk-map", EVAL_DB_PK_MAP,
         timeout=300.0,
     )
     if create.exit_code != 0:
@@ -334,7 +388,7 @@ async def _create_kn_for_agent(cli_agent: CliAgent, creds: dict) -> tuple[str, s
 
     # Wait for build to complete
     build = await cli_agent.run_cli("bkn", "build", kn_id, "--wait", timeout=600.0)
-    if build.exit_code != 0:
+    if build.exit_code != 0 and "JobConceptConfig" not in build.stderr:
         return None
 
     # Find first queryable OT

@@ -13,6 +13,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 async def test_object_type_get(
@@ -39,7 +40,7 @@ async def test_object_type_update_property_cycle(
     kn_id, ot_id = kn_with_data
 
     suffix = f"{int(time.time())}_{id(object()) % 10000}"
-    prop_name = f"eval_tmp_{suffix}"
+    prop_name = f"{EVAL_PREFIX}tmp_{suffix}"
     steps = []
 
     # Step 1: add property

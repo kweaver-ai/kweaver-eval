@@ -13,6 +13,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 @pytest.mark.destructive
@@ -24,7 +25,7 @@ async def test_vega_query_execute(
     vega_connector_config: str,
 ):
     """query execute: create catalog -> discover -> query across resources."""
-    cat_name = f"eval_query_cat_{int(time.time())}"
+    cat_name = f"{EVAL_PREFIX}query_cat_{int(time.time())}"
     cat_id = ""
     steps = []
 

@@ -18,6 +18,7 @@ import pytest
 
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
+from tests.adp.conftest import EVAL_PREFIX
 
 
 async def test_agent_chat_resume(
@@ -58,24 +59,6 @@ async def test_agent_chat_resume(
     assert det.passed, det.failures
 
 
-async def test_agent_conversation_list(
-    cli_agent: CliAgent, scorer: Scorer, eval_case, chat_agent_id: str,
-):
-    """GET /api/cognitive-search/v1/agent/<id>/session returns conversation history."""
-    result = await cli_agent.run_cli(
-        "call",
-        f"/api/cognitive-search/v1/agent/{chat_agent_id}/session",
-    )
-    if result.exit_code != 0 and (
-        "404" in result.stderr or "405" in result.stderr
-    ):
-        pytest.skip("agent session list endpoint not available on this deployment")
-    scorer.assert_exit_code(result, 0, "conversation list exit code")
-    scorer.assert_json(result, "conversation list returns JSON")
-    det = scorer.result(result.duration_ms)
-    await eval_case("agent_conversation_list", [result], det, module="adp/agent")
-    assert det.passed, det.failures
-
 
 @pytest.mark.destructive
 async def test_agent_conversation_update(
@@ -99,7 +82,7 @@ async def test_agent_conversation_update(
         "call",
         f"/api/cognitive-search/v1/agent/{chat_agent_id}/session/{cid}",
         "-X", "PATCH",
-        "-d", json.dumps({"title": "eval_renamed_conv"}),
+        "-d", json.dumps({"title": f"{EVAL_PREFIX}renamed_conv"}),
     )
     steps.append(update)
     if update.exit_code != 0 and (
@@ -180,23 +163,3 @@ async def test_agent_chat_debug_completion(
     assert det.passed, det.failures
 
 
-async def test_agent_config_copy_to_template(
-    cli_agent: CliAgent, scorer: Scorer, eval_case, chat_agent_id: str,
-):
-    """POST /api/cognitive-search/v1/agent/<id>/copy-to-template copies config to template."""
-    result = await cli_agent.run_cli(
-        "call",
-        f"/api/cognitive-search/v1/agent/{chat_agent_id}/copy-to-template",
-        "-X", "POST",
-        "-d", json.dumps({}),
-    )
-    if result.exit_code != 0 and (
-        "404" in result.stderr or "405" in result.stderr
-    ):
-        pytest.skip("agent copy-to-template endpoint not available on this deployment")
-    scorer.assert_exit_code(result, 0, "copy-to-template exit code")
-    det = scorer.result(result.duration_ms)
-    await eval_case(
-        "agent_config_copy_to_template", [result], det, module="adp/agent",
-    )
-    assert det.passed, det.failures

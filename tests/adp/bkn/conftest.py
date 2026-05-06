@@ -5,6 +5,7 @@ db_credentials fixture is inherited from tests/adp/conftest.py.
 
 from __future__ import annotations
 
+import json
 import random
 import string
 import time
@@ -12,8 +13,7 @@ import time
 import pytest
 
 from lib.agents.cli_agent import CliAgent
-
-EVAL_PREFIX = "eval_"
+from tests.adp.conftest import EVAL_DB_PK_MAP, EVAL_DB_TABLES, EVAL_PREFIX
 
 
 def _short_suffix() -> str:
@@ -201,9 +201,15 @@ async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str
     if not ds_id:
         return None
 
-    # Step 2: bkn create-from-ds
+    # Step 2: bkn create-from-ds — pin to EVAL_DB_TABLES + spell out PKs
+    # (BKN's auto-detect samples data instead of reading the SQL PRIMARY
+    # KEY constraint, so the schema-level definitions in lib/eval_db.py
+    # don't satisfy it on their own).
     create = await cli_agent.run_cli(
         "bkn", "create-from-ds", ds_id, "--name", kn_name, "--no-build",
+        "--tables", ",".join(EVAL_DB_TABLES),
+        "--pk-map", EVAL_DB_PK_MAP,
+        timeout=300.0,
     )
     if create.exit_code != 0:
         await cli_agent.run_cli("ds", "delete", ds_id, "-y")
@@ -286,3 +292,134 @@ async def kn_with_data(cli_agent: CliAgent, db_credentials: dict):
 
     # Still no OT — skip (build required but too slow for fixture)
     pytest.skip("No KN with object types available (build required)")
+
+
+# ---------------------------------------------------------------------------
+# Action-type / action-schedule discovery helpers
+# ---------------------------------------------------------------------------
+
+async def _find_kn_with_action_type(cli_agent: CliAgent) -> tuple[str, str] | None:
+    """Find a KN with at least one action type. Returns (kn_id, at_id) or None."""
+    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
+    if result.exit_code != 0:
+        return None
+    kns = result.parsed_json
+    if isinstance(kns, dict):
+        kns = kns.get("entries") or []
+    if not isinstance(kns, list):
+        return None
+    for kn in kns:
+        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
+        if not kn_id:
+            continue
+        at_result = await cli_agent.run_cli("bkn", "action-type", "list", kn_id)
+        if at_result.exit_code != 0:
+            continue
+        entries = at_result.parsed_json
+        if isinstance(entries, dict):
+            entries = entries.get("entries") or entries.get("items") or []
+        if isinstance(entries, list) and entries:
+            at_id = str(entries[0].get("id") or "")
+            if at_id:
+                return kn_id, at_id
+    return None
+
+
+async def _find_kn_with_schedule(cli_agent: CliAgent) -> tuple[str, str] | None:
+    """Find a KN with at least one action schedule. Returns (kn_id, sched_id) or None."""
+    result = await cli_agent.run_cli("bkn", "list", "--limit", "20")
+    if result.exit_code != 0:
+        return None
+    kns = result.parsed_json
+    if isinstance(kns, dict):
+        kns = kns.get("entries") or []
+    if not isinstance(kns, list):
+        return None
+    for kn in kns:
+        kn_id = str(kn.get("id") or kn.get("kn_id") or "")
+        if not kn_id:
+            continue
+        sched_result = await cli_agent.run_cli("bkn", "action-schedule", "list", kn_id)
+        if sched_result.exit_code != 0:
+            continue
+        entries = sched_result.parsed_json
+        if isinstance(entries, dict):
+            entries = entries.get("entries") or entries.get("items") or []
+        if isinstance(entries, list) and entries:
+            sched_id = str(entries[0].get("id") or "")
+            if sched_id:
+                return kn_id, sched_id
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped action-type / action-schedule fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+async def kn_with_action_type(cli_agent: CliAgent, kn_with_data: tuple[str, str]):
+    """Ensure a KN with an action type exists. Returns (kn_id, at_id).
+
+    Fast path: scan all KNs for an existing action type.
+    Slow path: create one on kn_with_data's KN.
+    """
+    found = await _find_kn_with_action_type(cli_agent)
+    if found:
+        yield found
+        return
+
+    kn_id, _ot_id = kn_with_data
+    at_name = f"{EVAL_PREFIX}at_{int(time.time())}_{_short_suffix()}"
+    create = await cli_agent.run_cli(
+        "bkn", "action-type", "create", kn_id,
+        json.dumps({"name": at_name, "action_type": "add"}),
+    )
+    if create.exit_code != 0:
+        pytest.skip(f"Cannot create action type: {create.stderr[:200]}")
+    at_id = ""
+    parsed = create.parsed_json
+    if isinstance(parsed, list) and parsed:
+        at_id = str(parsed[0].get("id") or "")
+    elif isinstance(parsed, dict):
+        at_id = str(parsed.get("id") or "")
+    if not at_id:
+        pytest.skip("action-type create returned no ID")
+    yield kn_id, at_id
+
+
+@pytest.fixture(scope="session")
+async def kn_with_action_schedule(
+    cli_agent: CliAgent, kn_with_action_type: tuple[str, str],
+):
+    """Ensure a KN with an action schedule exists. Returns (kn_id, sched_id).
+
+    Fast path: scan all KNs for an existing schedule.
+    Slow path: create one using kn_with_action_type.
+    """
+    found = await _find_kn_with_schedule(cli_agent)
+    if found:
+        yield found
+        return
+
+    kn_id, at_id = kn_with_action_type
+    sched_name = f"{EVAL_PREFIX}sched_{int(time.time())}_{_short_suffix()}"
+    create = await cli_agent.run_cli(
+        "bkn", "action-schedule", "create", kn_id,
+        json.dumps({
+            "name": sched_name,
+            "cron_expression": "0 2 * * *",
+            "action_type_id": at_id,
+            "_instance_identities": [{}],
+        }),
+    )
+    if create.exit_code != 0:
+        pytest.skip(f"Cannot create action schedule: {create.stderr[:200]}")
+    sched_id = ""
+    parsed = create.parsed_json
+    if isinstance(parsed, list) and parsed:
+        sched_id = str(parsed[0].get("id") or "")
+    elif isinstance(parsed, dict):
+        sched_id = str(parsed.get("id") or "")
+    if not sched_id:
+        pytest.skip("action-schedule create returned no ID")
+    yield kn_id, sched_id

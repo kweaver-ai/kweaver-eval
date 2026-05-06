@@ -18,10 +18,11 @@ import pytest
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 from tests.adp.bkn.conftest import _short_suffix
+from tests.adp.conftest import EVAL_PREFIX
 
 
 def _at_name() -> str:
-    return f"eval_at_{int(time.time())}_{_short_suffix()}"
+    return f"{EVAL_PREFIX}at_{int(time.time())}_{_short_suffix()}"
 
 
 async def _find_kn_id(cli_agent: CliAgent) -> str | None:
@@ -50,12 +51,10 @@ async def test_bkn_action_type_lifecycle(
     at_id = ""
     steps = []
 
-    # Minimal action type config; exact schema varies by deployment.
-    # The test documents the expected shape rather than asserting specific fields.
+    # action_type is the CRUD semantic on knowledge graph instances: add/modify/delete
     at_config = json.dumps({
         "name": name,
-        "type": "http",
-        "config": {"url": "http://example.com/action", "method": "POST"},
+        "action_type": "add",
     })
 
     try:
@@ -70,13 +69,16 @@ async def test_bkn_action_type_lifecycle(
             pytest.skip("bkn action-type create not available in this SDK version")
         scorer.assert_exit_code(create, 0, "action-type create")
         scorer.assert_json(create, "action-type create returns JSON")
-        if isinstance(create.parsed_json, dict):
-            at_id = str(create.parsed_json.get("id") or "")
+        parsed = create.parsed_json
+        if isinstance(parsed, list) and parsed:
+            parsed = parsed[0]
+        if isinstance(parsed, dict):
+            at_id = str(parsed.get("id") or "")
         scorer.assert_true(bool(at_id), "action-type create returns ID")
 
         # Update
         if at_id:
-            new_config = json.dumps({"name": f"{name}_upd"})
+            new_config = json.dumps({"name": f"{name}_upd", "action_type": "add"})
             update = await cli_agent.run_cli(
                 "bkn", "action-type", "update", kn_id, at_id, new_config,
             )
