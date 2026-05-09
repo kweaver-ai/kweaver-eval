@@ -56,20 +56,17 @@ async def test_context_loader_kn_semantic_search(
 
 
 async def test_context_loader_find_skills(
-    cli_agent: CliAgent, scorer: Scorer, eval_case, cl_config_active: bool,
+    cli_agent: CliAgent, scorer: Scorer, eval_case,
+    cl_kn_with_ot: tuple[str, str],
 ):
-    """context-loader find-skills returns skills relevant to a query."""
+    """context-loader find-skills returns skills relevant to an object type."""
+    # SDK 0.7.x signature: `find-skills <kn-id> <ot_id>`. Pass both
+    # positionally so we don't depend on the deprecated saved-config
+    # / state.json::currentPlatform path.
+    kn_id, ot_id = cl_kn_with_ot
     result = await cli_agent.run_cli(
-        "context-loader", "find-skills", "search",
+        "context-loader", "find-skills", kn_id, ot_id,
     )
-    if result.exit_code != 0 and (
-        "unknown" in result.stderr.lower()
-        or "command not found" in result.stderr.lower()
-    ):
-        # Fallback: call the tools list endpoint (skills are MCP tools)
-        result = await cli_agent.run_cli(
-            "context-loader", "tools",
-        )
     if result.exit_code != 0 and "404" in result.stderr:
         pytest.skip("find-skills endpoint not available on this deployment")
     scorer.assert_exit_code(result, 0, "find-skills exit code")

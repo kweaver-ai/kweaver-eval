@@ -18,10 +18,12 @@ from lib.scorer import Scorer
 
 
 async def test_context_loader_tools(
-    cli_agent: CliAgent, scorer: Scorer, eval_case, cl_config_active: bool,
+    cli_agent: CliAgent, scorer: Scorer, eval_case, cl_kn_id: str,
 ):
     """context-loader tools returns list of available MCP tools."""
-    result = await cli_agent.run_cli("context-loader", "tools")
+    # Pass <kn-id> positionally so the call doesn't fall back to the
+    # deprecated saved-config / state.json::currentPlatform path.
+    result = await cli_agent.run_cli("context-loader", "tools", cl_kn_id)
     scorer.assert_exit_code(result, 0, "context-loader tools")
     scorer.assert_json(result, "tools returns JSON")
     det = scorer.result(result.duration_ms)
