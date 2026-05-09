@@ -67,7 +67,24 @@ async def cleanup_eval_agent_resources(cli_agent: CliAgent):
 # we always probe every model and pick the first one whose chat actually
 # works, so a deprovisioned/arrears-blocked model is auto-skipped without
 # code changes.
-_LLM_PREFERENCE = ("deepseek-v4", "deepseek-v3", "deepseek", "qwen3-80b", "qwen")
+#
+# Match is exact (lower-cased model_name == pref). Names not in this list still
+# get picked up as fallback candidates by `_ordered_candidates`.
+#
+# Why `deepseek-chat` first (env 62, 2026-05-08): the thinking-mode variants
+# (`deepseek-v4-flash`, `deepseek-v4-pro`) emit `reasoning_content` tokens that
+# the agent runtime drops on multi-turn re-feed (KN-bound or memory-instruction
+# prompts), so DeepSeek's API returns `invalid_request_error: The
+# reasoning_content in the thinking mode must be passed back to the API`. Plain
+# chat without those prompts works for thinking models, but `owned_agent*`
+# scenarios use both — pick the non-thinking model. `deepseek-v4-flash-chat`
+# is excluded because its upstream API key on env 62 (****3ffd) is invalid.
+_LLM_PREFERENCE = (
+    "deepseek-chat",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "qwen3-max",
+)
 
 
 async def _fetch_llm_models(cli_agent: CliAgent) -> list[dict]:
@@ -99,10 +116,10 @@ def _ordered_candidates(models: list[dict]) -> list[tuple[str, str]]:
     ordered: list[tuple[str, str]] = []
     used: set[str] = set()
     for pref in _LLM_PREFERENCE:
-        for name, pair in by_name.items():
-            if pref in name and name not in used:
-                ordered.append(pair)
-                used.add(name)
+        pair = by_name.get(pref)
+        if pair and pref not in used:
+            ordered.append(pair)
+            used.add(pref)
     for name, pair in by_name.items():
         if name not in used:
             ordered.append(pair)

@@ -223,9 +223,13 @@ async def _find_kn_with_object_types(cli_agent: CliAgent) -> tuple[str, str] | N
             ot_id = str(ot.get("id") or ot.get("ot_id") or "")
             if not ot_id:
                 continue
-            # Verify query actually works (catch orphan KNs)
+            # Verify query actually works (catch orphan KNs).
+            # Use the test's default form (no --limit) so a probe pass
+            # guarantees the test's query also works; otherwise leftover
+            # KNs whose backend index breaks under full scans slip through
+            # the limit-1 fast path and only fail later.
             probe = await cli_agent.run_cli(
-                "bkn", "object-type", "query", kn_id, ot_id, "--limit", "1",
+                "bkn", "object-type", "query", kn_id, ot_id,
             )
             if probe.exit_code == 0:
                 return kn_id, ot_id
@@ -256,12 +260,13 @@ async def _find_kn_with_rich_data(
         if ot_result.exit_code != 0 or not isinstance(ot_entries, list) or len(ot_entries) < 2:
             continue
 
-        # Check first OT is queryable
+        # Check first OT is queryable. Match the test's default form
+        # (no --limit) so probe-pass guarantees test-pass.
         first_ot_id = str(ot_entries[0].get("id") or ot_entries[0].get("ot_id") or "")
         if not first_ot_id:
             continue
         probe = await cli_agent.run_cli(
-            "bkn", "object-type", "query", kn_id, first_ot_id, "--limit", "1",
+            "bkn", "object-type", "query", kn_id, first_ot_id,
         )
         if probe.exit_code != 0:
             continue
@@ -309,9 +314,7 @@ async def _create_kn_from_db(cli_agent: CliAgent, creds: dict) -> tuple[str, str
         return None
 
     # Step 2: bkn create-from-ds — pin to EVAL_DB_TABLES + spell out PKs
-    # (BKN's auto-detect samples data instead of reading the SQL PRIMARY
-    # KEY constraint, so the schema-level definitions in lib/eval_db.py
-    # don't satisfy it on their own).
+    # (BKN's auto-detect gets sampleRows=[] on env 62, see EVAL_DB_PK_MAP).
     create = await cli_agent.run_cli(
         "bkn", "create-from-ds", ds_id, "--name", kn_name,
         "--tables", ",".join(EVAL_DB_TABLES),
@@ -430,20 +433,28 @@ async def kn_with_data(cli_agent: CliAgent, db_credentials: dict):
         pytest.skip("Cannot create KN (ds connect failed)")
     ds_id, kn_id = result
 
-    # Check if the new KN has object types (create-from-ds may auto-discover schema)
     ot_result = await cli_agent.run_cli("bkn", "object-type", "list", kn_id)
     entries = ot_result.parsed_json
     if isinstance(entries, dict):
         entries = entries.get("entries", [])
-    if ot_result.exit_code == 0 and isinstance(entries, list) and entries:
-        ot = entries[0]
+    if ot_result.exit_code != 0 or not isinstance(entries, list) or not entries:
+        pytest.skip("No KN with object types available (build required)")
+
+    # Probe each OT until one is queryable. Match the test's invocation form
+    # (no --limit) so probe-pass guarantees test-pass — same pattern as the
+    # fast-path helpers above.
+    for ot in entries:
         ot_id = str(ot.get("id") or ot.get("ot_id") or "")
-        if ot_id:
+        if not ot_id:
+            continue
+        probe = await cli_agent.run_cli(
+            "bkn", "object-type", "query", kn_id, ot_id,
+        )
+        if probe.exit_code == 0:
             yield kn_id, ot_id
             return
 
-    # Still no OT — skip (build required but too slow for fixture)
-    pytest.skip("No KN with object types available (build required)")
+    pytest.skip("Freshly-built KN has no queryable OT")
 
 
 # ---------------------------------------------------------------------------

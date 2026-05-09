@@ -9,7 +9,7 @@ import pytest
 from lib.agents.cli_agent import CliAgent
 from lib.scorer import Scorer
 from tests.adp.bkn.conftest import _short_suffix
-from tests.adp.conftest import EVAL_PREFIX
+from tests.adp.conftest import EVAL_DB_PK_MAP, EVAL_PREFIX
 
 
 @pytest.mark.destructive
@@ -26,13 +26,18 @@ async def test_bkn_full_lifecycle(
     steps = []
 
     try:
-        # Step 1: ds connect (120s — external DB may be slow)
+        # Step 1: ds connect (120s — external DB may be slow). `--force-new`
+        # opts out of the by-(host,port,db) dedup so the `ds delete` in our
+        # finally below only kills the DS we created here, not one that
+        # `kn_with_data` / agent fixtures share via dedup against the same
+        # eval DB.
         connect = await cli_agent.run_cli(
             "ds", "connect",
             creds["db_type"], creds["host"], creds["port"], creds["database"],
             "--account", creds["user"],
             "--password", creds["password"],
             "--name", ds_name,
+            "--force-new",
             timeout=120.0,
         )
         steps.append(connect)
@@ -56,6 +61,7 @@ async def test_bkn_full_lifecycle(
 
         # Pick at most 3 tables to keep create-from-ds fast
         tables_arg: list[str] = []
+        table_names: list[str] = []
         ds_json = connect.parsed_json
         if isinstance(ds_json, dict):
             tables_list = ds_json.get("tables") or []
@@ -68,11 +74,25 @@ async def test_bkn_full_lifecycle(
             if table_names:
                 tables_arg = ["--tables", ",".join(table_names)]
 
+        # Build pk-map filtered to the tables we actually selected.
+        # See EVAL_DB_PK_MAP for why every table needs an explicit PK
+        # (no sample rows reach the SDK on env 62).
+        pk_arg: list[str] = []
+        if table_names:
+            selected = set(table_names)
+            filtered = ",".join(
+                pair for pair in EVAL_DB_PK_MAP.split(",")
+                if pair.split(":", 1)[0] in selected
+            )
+            if filtered:
+                pk_arg = ["--pk-map", filtered]
+
         # Step 2: bkn create-from-ds
         create = await cli_agent.run_cli(
             "bkn", "create-from-ds", ds_id,
             "--name", kn_name, "--no-build",
             *tables_arg,
+            *pk_arg,
             timeout=300.0,
         )
         steps.append(create)

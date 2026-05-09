@@ -17,9 +17,15 @@ EVAL_PREFIX = "eval_"
 # Tables seeded into the eval-owned schema (see lib/eval_db.py).
 EVAL_DB_TABLES = ("suppliers", "materials", "skills", "mat_skill")
 
-# BKN's `create-from-ds` auto-detect inspects sample data, not the actual
-# schema's PRIMARY KEY constraint, so we still need to spell PKs out
-# explicitly even though lib/eval_db.py defines them at the SQL level.
+# BKN's `create-from-ds` resolves PK via:
+#   override (--pk-map) > schema-declared PK > sample uniqueness > fail.
+# On env 62 (verified 2026-05-09): the legacy /api/data-connection/v1
+# path returns table columns with only {name,type,comment} (no PK fields,
+# no sample rows), so the SDK reaches `detectPrimaryKey` with sampleRows=[]
+# and fails every table with "No sample data available" — regardless of
+# how much data MySQL actually has. Spell every PK explicitly until the
+# SDK migrates to /api/vega-backend/v1/catalogs (kweaver-sdk#114) and 62
+# exposes PK metadata there.
 EVAL_DB_PK_MAP = (
     "suppliers:supplier_id,materials:sku,skills:skill_id,mat_skill:sku"
 )

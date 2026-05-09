@@ -122,6 +122,24 @@ async def test_object_type_update_property_cycle(
         still_there = any(p.get("name") == prop_name for p in props)
         scorer.assert_true(not still_there, "temp property removed")
 
+    # Step 6: rebuild to re-sync OT → data view → DS. WORKAROUND: `bkn
+    # object-type update --add-property` desyncs the OT from its data view
+    # at the vega-gateway layer (verified deterministically on env 62,
+    # 2026-05-09); subsequent vega-routed reads — notably `bkn object-type
+    # properties` — return HTTP 500 `数据源ID不存在` even though the DS is
+    # alive and the OT's `data_source.id` is unchanged. A rebuild is the
+    # only known recovery. We share `kn_with_data` with downstream tests,
+    # so leaving the KN dirty would silently break them. Drop this step
+    # once the platform fix lands.
+    rebuild = await cli_agent.run_cli(
+        "bkn", "build", kn_id, "--wait", timeout=600.0,
+    )
+    steps.append(rebuild)
+    scorer.assert_true(
+        rebuild.exit_code == 0 or "JobConceptConfig" in (rebuild.stderr or ""),
+        "rebuild after property cycle to restore OT/DV sync",
+    )
+
     det = scorer.result()
     await eval_case(
         "bkn_object_type_update_cycle", steps, det, module="adp/bkn",
