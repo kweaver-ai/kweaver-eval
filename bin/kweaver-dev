@@ -1,0 +1,2 @@
+#!/bin/bash
+exec node /Users/xupeng/dev/github/kweaver-sdk/.claude/worktrees/feat+vega-dataview-upgrade/packages/typescript/bin/kweaver.js "$@"

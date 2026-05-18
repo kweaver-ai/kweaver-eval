@@ -83,24 +83,27 @@ async def ds_id(cli_agent: CliAgent) -> str:
 
 
 @pytest.fixture(scope="session")
-async def dataview_id(cli_agent: CliAgent) -> str:
-    """Find a queryable dataview ID. Probes query to skip orphan dataviews
-    whose underlying datasource has been deleted."""
-    result = await cli_agent.run_cli("dataview", "list", "--limit", "20")
+async def queryable_resource_id(cli_agent: CliAgent) -> str:
+    """Find a queryable resource ID via the top-level `resource` command.
+
+    Probes each resource with `resource query` to skip orphans or resources
+    whose underlying datasource has been deleted or is unqueryable.
+    """
+    result = await cli_agent.run_cli("resource", "list", "--limit", "20")
     if result.exit_code != 0:
-        pytest.skip("Cannot list dataviews")
+        pytest.skip("Cannot list resources")
     parsed = result.parsed_json
     entries = parsed if isinstance(parsed, list) else (parsed or {}).get("entries") or []
     if not isinstance(entries, list) or len(entries) == 0:
-        pytest.skip("No dataviews available")
-    for dv in entries:
-        dvid = str(dv.get("id") or "")
-        if not dvid:
+        pytest.skip("No resources available")
+    for res in entries:
+        rid = str(res.get("id") or "")
+        if not rid:
             continue
-        probe = await cli_agent.run_cli("dataview", "query", dvid, "--limit", "1")
+        probe = await cli_agent.run_cli("resource", "query", rid, "--limit", "1")
         if probe.exit_code == 0:
-            return dvid
-    pytest.skip("No queryable dataview found (all may be orphans)")
+            return rid
+    pytest.skip("No queryable resource found (all may be orphans)")
 
 
 @pytest.fixture(scope="session")

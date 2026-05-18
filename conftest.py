@@ -74,9 +74,15 @@ def base_url() -> str:
 
 @pytest.fixture(scope="session")
 def cli_agent() -> CliAgent:
-    """Create CLI agent with platform-appropriate command."""
+    """Create CLI agent with platform-appropriate command.
+
+    Override the binary via KWEAVER_CLI_BINARY env var (e.g. to point at a
+    locally-built worktree before the release is published).
+    """
     import sys
-    # On Windows, use kweaver.cmd if available, otherwise fall back to kweaver
+    binary = os.environ.get("KWEAVER_CLI_BINARY", "")
+    if binary:
+        return CliAgent(cli_binary=binary)
     if sys.platform == "win32":
         return CliAgent(cli_binary="kweaver.cmd")
     return CliAgent()
